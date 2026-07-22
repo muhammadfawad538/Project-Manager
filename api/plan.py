@@ -1,32 +1,19 @@
 """
-Vercel serverless function — runs the L1 project planning crew.
+Vercel serverless function — runs the L1 project planning crew inline
+to avoid import-time crashes from CrewAI.
 
 POST /api/plan
-Body (JSON):
-{
-  "project_type": "Website",
-  "project_requirements": "...",
-  "team_members": "...",
-  "industry": "Technology"
-}
-
-Returns JSON:
-{
-  "tasks": [...],
-  "milestones": [...],
-  "usage": { "prompt_tokens": ..., "completion_tokens": ..., "cost_usd": ... }
-}
+Body JSON: { project_type, project_requirements, team_members, industry }
+Returns: { tasks, milestones, usage }
 """
-from __future__ import annotations
-
 import json
 import os
 import sys
+from pathlib import Path
 
-# Add src/ to path so pmagent resolves
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-# ---- SQLite workaround (same as main.py) ----
+# ── SQLite workaround ─────────────────────────────────────────────────
 try:
     import crewai.memory.storage.kickoff_task_outputs_storage as _kos
     import crewai.utilities.task_output_storage_handler as _tosh
@@ -47,54 +34,61 @@ try:
 except Exception:
     pass
 
-# ---- Groq cache workaround (same as main.py) ----
+# ── Groq cache workaround ────────────────────────────────────────────
 try:
     import crewai.llms.cache as _cache_mod
 
-    def _noop_mark(message):
-        return message
+    def _noop_mark(msg):
+        return msg
 
     _cache_mod.mark_cache_breakpoint = _noop_mark
 except Exception:
     pass
 
-from pmagent.main import crew, kickoff  # noqa: E402
+# ── Entry point ───────────────────────────────────────────────────────
+from pmagent.main import crew, DEFAULT_INPUTS  # noqa: E402
 
 
-def handler(request):
-    """Vercel Python function entry point."""
+def run_crew(inputs):
+    """Run the crew inline to avoid importing __main__ logic."""
+    return crew.kickoff(inputs=inputs)
+
+
+def handler(event):
     try:
-        body = request.json() if hasattr(request, "json") else {}
+        body = json.loads(event.get("body") or "{}")
     except Exception:
         body = {}
 
     inputs = {
-        "project_type": body.get("project_type", "Website"),
-        "project_requirements": body.get("project_requirements", ""),
-        "team_members": body.get("team_members", ""),
-        "industry": body.get("industry", "Technology"),
+        "project_type": body.get("project_type", DEFAULT_INPUTS["project_type"]),
+        "project_requirements": body.get("project_requirements", DEFAULT_INPUTS["project_requirements"]),
+        "team_members": body.get("team_members", DEFAULT_INPUTS["team_members"]),
+        "industry": body.get("industry", DEFAULT_INPUTS["industry"]),
     }
 
-    result = kickoff()
-
-    plan = getattr(result, "pydantic", None)
-    if plan is not None:
-        output = plan.model_dump()
-    else:
-        output = {"raw": getattr(result, "raw", str(result))}
-
     try:
-        usage = crew.usage_metrics
-        total_tokens = usage.prompt_tokens + usage.completion_tokens
-        cost = 0.05 * total_tokens / 1_000_000
-        output["usage"] = {
-            "prompt_tokens": usage.prompt_tokens,
-            "completion_tokens": usage.completion_tokens,
-            "total_tokens": total_tokens,
-            "cost_usd": round(cost, 6),
+        result = run_crew(inputs)
+        plan = getattr(result, "pydantic", None)
+        output = plan.model_dump() if plan is not None else {"raw": getattr(result, "raw", str(result))}
+
+        try:
+            usage = crew.usage_metrics
+            total = usage.prompt_tokens + usage.completion_tokens
+            output["usage"] = {
+                "prompt_tokens": usage.prompt_tokens,
+                "completion_tokens": usage.completion_tokens,
+                "total_tokens": total,
+                "cost_usd": round(0.05 * total / 1_000_000, 6),
+            }
+        except Exception:
+            pass
+    except Exception as exc:
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": str(exc)}),
         }
-    except Exception:
-        pass
 
     return {
         "statusCode": 200,
