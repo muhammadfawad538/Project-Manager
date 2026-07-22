@@ -1,7 +1,7 @@
 {
   "version": 2,
   "routes": [
-    { "src": "/api/plan", "dest": "/api/plan" },
+    { "src": "/api/plan", "dest": "/api/main.py" },
     { "src": "/(.*)", "dest": "/web/index.html" }
   ]
 }
