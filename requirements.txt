@@ -1,0 +1,11 @@
+# Line ending: LF
+# Encoding: UTF-8
+
+crewai>=0.86.0
+crewai-tools>=0.14.0
+pydantic>=2.0.0
+pyyaml>=6.0
+python-dotenv>=1.0.0
+pandas>=2.0.0
+openai>=1.0.0
+duckduckgo-search>=6.0.0

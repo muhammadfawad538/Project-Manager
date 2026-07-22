@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "api/plan.py", "use": "@vercel/python" },
+    { "src": "web/index.html", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/api/plan", "dest": "api/plan.py" },
+    { "src": "/(.*)", "dest": "web/index.html" }
+  ]
+}
