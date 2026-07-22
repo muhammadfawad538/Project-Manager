@@ -6,12 +6,7 @@
   ],
   "routes": [
     { "src": "/api/plan", "dest": "api/plan.py" },
+    { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/(.*)", "dest": "web/index.html" }
-  ],
-  "functions": {
-    "api/plan.py": {
-      "runtime": "python3.11",
-      "maxDuration": 120
-    }
-  }
+  ]
 }
