@@ -9,8 +9,5 @@ build/
 # Env
 .env
 
-# Vercel local
-.vercel
-
 # Caches
 .pytest_cache/
