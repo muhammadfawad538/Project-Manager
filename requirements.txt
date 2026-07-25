@@ -1,16 +1,6 @@
-# Line ending: LF
-# Encoding: UTF-8
-
 crewai>=0.86.0
-crewai-tools>=0.14.0
-crewai[litellm]>=0.86.0
 pydantic>=2.0.0
 pyyaml>=6.0
 python-dotenv>=1.0.0
-pandas>=2.0.0
 openai>=1.0.0
-duckduckgo-search>=6.0.0
 sqlalchemy>=2.0.0
-fastapi>=0.111.0
-uvicorn>=0.30.0
-psycopg2-binary>=2.9.9

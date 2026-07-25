@@ -18,6 +18,5 @@
   ],
   "env": {
     "LITELLM_CACHE": "False"
-  },
-  "installCommand": "pip install -r requirements.txt"
+  }
 }
