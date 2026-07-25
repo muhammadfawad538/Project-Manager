@@ -88,7 +88,7 @@ def _get_crew():
         traceback.print_exc()
         raise RuntimeError(
             f"Failed to initialise CrewAI crew: {exc}. "
-            "Check that OPENAI_API_KEY is set in Vercel env vars."
+            "Check that all required env vars (OPENAI_API_KEY) are set in Vercel."
         ) from exc
 
 
