@@ -22,6 +22,24 @@ if _project_root not in sys.path:
 
 app = FastAPI(title="pmagent – AI Project Planning API")
 
+
+@app.on_event("startup")
+def _on_startup():
+    import os
+    print("[STARTUP] pmagent API starting...")
+    print(f"[STARTUP] DATABASE_URL={os.environ.get('DATABASE_URL', 'not set (using SQLite)')}")
+    print(f"[STARTUP] OPENAI_API_KEY={'set' if os.environ.get('OPENAI_API_KEY') else 'NOT SET'}")
+    print(f"[STARTUP] OPENAI_MODEL_NAME={os.environ.get('OPENAI_MODEL_NAME', 'gpt-4o-mini')}")
+
+
+@app.exception_handler(Exception)
+async def catch_all(request, exc):
+    import traceback
+    tb = traceback.format_exc()
+    print(f"[ERROR] {exc}\n{tb}")
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=500, content={"error": str(exc), "traceback": tb})
+
 # ── Request / response schemas ───────────────────────────────────────────────
 
 class ProjectInput(BaseModel):
@@ -47,11 +65,8 @@ class ProjectPlanResponse(BaseModel):
     raw: str = Field(default="", description="Raw crew kickoff output text")
 
 # ── Lazy runtime init ────────────────────────────────────────────────────────
-# Importing `pmagent.main` at module level would run crew.kickoff() at import
-# time (because of the `if __name__ == "__main__"` guard it doesn't, but some
-# CrewAI versions emit warnings). Importing inside the request handler ensures
-# nothing heavy runs until a real request arrives.
-# We cache the crew + config so we only initialise once per serverless instance.
+# CrewAI + SQLAlchemy are heavy. Import inside the request handler so
+# Vercel's cold start only pays that cost on the first /plan call.
 
 _crew = None
 _inputs_defaults = None
@@ -63,10 +78,18 @@ def _get_crew():
     if _crew is not None:
         return _crew, _inputs_defaults
 
-    from pmagent.main import crew, inputs as _inp  # noqa: WPS433
-    _crew = crew
-    _inputs_defaults = _inp
-    return _crew, _inputs_defaults
+    import traceback, sys
+    try:
+        from pmagent.main import crew, inputs as _inp  # noqa: WPS433
+        _crew = crew
+        _inputs_defaults = _inp
+        return _crew, _inputs_defaults
+    except Exception as exc:
+        traceback.print_exc()
+        raise RuntimeError(
+            f"Failed to initialise CrewAI crew: {exc}. "
+            "Check that OPENAI_API_KEY is set in Vercel env vars."
+        ) from exc
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
