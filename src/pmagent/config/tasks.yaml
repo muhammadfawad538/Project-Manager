@@ -5,6 +5,8 @@ task_breakdown:
     task's scope in detail, set achievable timelines, and ensure that
     all dependencies are accounted for:
 
+    Project deadline: {deadline}
+
     Project requirements:
 
     {project_requirements}
@@ -38,10 +40,46 @@ resource_allocation:
     team members based on their skills, availability, and current
     workload. Ensure that each task is assigned to the most suitable
     team member and that the workload is evenly distributed.
+
+    IMPORTANT: In your final output, for EVERY task include the
+    "assigned_to" field with the exact team member name from the
+    team list. Do not leave it blank.
   expected_output: >
     A structured project plan with tasks allocated to team members,
     including timelines, milestones, and a summary of resource
-    distribution.
+    distribution. Every task must have an assigned team member.
   agent: resource_allocation_agent
   output_pydantic:
     - ProjectPlan
+
+daily_management:
+  description: >
+    You are now running a daily project management cycle for the
+    active project.  Your job is to:
+
+    1. Use list_projects to find the active project.
+    2. Use get_project to load all tasks, team members, milestones,
+       and recent daily logs.
+    3. Evaluate the current state:
+       • How many tasks are in progress vs. done vs. blocked?
+       • Are there overdue tasks (past their due_date)?
+       • Are there any blockers that have been open too long?
+       • Is any team member overloaded?
+    4. Update task statuses where work has clearly advanced.
+    5. Log today's standup entries for active tasks using
+       log_daily_standup (yesterday, today, blockers, hours worked).
+    6. If progress is significantly behind estimates, consider
+       running run_l1_plan to generate a revised plan.
+    7. If stakeholders need a status update, run run_l2_report to
+       produce a sprint report.
+    8. Run find_blockers to surface any newly blocked or overdue
+       tasks, and recommend immediate actions.
+    9. Summarize everything you did in a short PM report:
+       decisions made, risks found, actions taken, next steps.
+
+    Always use the tools first — never guess at project state.
+    Your final output must be a markdown PM daily report.
+  expected_output: >
+    A markdown daily PM report listing project health, tasks updated,
+    blockers found, logs written, decisions taken, and next steps.
+  agent: manager_agent

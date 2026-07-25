@@ -4,10 +4,21 @@ __pycache__/
 dist/
 build/
 .eggs/
-*.egg-info/
+*.egg-info
 
 # Env
 .env
+.env.*
+
+# Database
+data/
+*.db
+*.sqlite
+*.sqlite3
 
 # Caches
 .pytest_cache/
+
+# IDE
+.idea/
+.vscode/
