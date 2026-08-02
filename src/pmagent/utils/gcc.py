@@ -18,66 +18,81 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 # ── Hijri Calendar ────────────────────────────────────────────────────────────
-# Approximate conversion based on the tabular Islamic calendar.
-# For production use, replace with the official Umm al-Qura calendar
-# from Saudi Arabia (available as JSON from multiple open-source repos).
-# This approximation is accurate within ±1-2 days for most dates.
-
-_HIJRI_EPOCH = datetime.date(622, 7, 16)  # July 16, 622 CE (1 Muharram 1 AH)
-_HIJRI_YEAR_DAYS = 354.36667  # Average lunar year length
+# Production note: Replace this stub with official Umm al-Qura calendar data
+# for Saudi government compliance. The Umm al-Qura calendar is available as
+# JSON from multiple open-source repositories (e.g., saudi-hijri-calendar).
+# This stub returns approximate values for development/demo purposes only.
 
 
-def _is_hijri_leap(year: int) -> bool:
-    """Tabular Islamic calendar leap year: years 2, 5, 7, 10, 13, 16, 18, 21, 24, 26, 29."""
-    return year % 30 in (2, 5, 7, 10, 13, 16, 18, 21, 24, 26, 29)
+def _approx_hijri(date: datetime.date) -> tuple[int, int, int]:
+    """Approximate Hijri conversion using tabular Islamic calendar.
 
+    Note: This is an approximation. For production, use Umm al-Qura calendar.
+    """
+    epoch = datetime.date(622, 7, 16)  # 1 Muharram 1 AH
+    days = (date - epoch).days
 
-def _hijri_month_days(year: int, month: int) -> int:
-    """Days in a Hijri month. Dhu al-Hijjah has 30 days in leap years, 29 otherwise."""
-    if month == 12 and _is_hijri_leap(year):
-        return 30
-    return 30 if month % 2 == 1 else 29
+    # Approximate year
+    hijri_year = int(days / 354.36667) + 1
+
+    # Adjust year by checking cumulative days
+    for y in range(max(1, hijri_year - 1), hijri_year + 2):
+        yd = sum(30 if m % 2 == 1 else 29 for m in range(1, 13))
+        if y % 30 in (2, 5, 7, 10, 13, 16, 18, 21, 24, 26, 29):
+            yd += 1  # leap year adds 1 day
+        # Check if our date falls in this year (approximate)
+        year_start_days = int((y - 1) * 354.36667)
+        year_end_days = int(y * 354.36667)
+        if year_start_days <= days < year_end_days:
+            hijri_year = y
+            break
+
+    # Approximate month and day within year
+    year_start = int((hijri_year - 1) * 354.36667)
+    day_of_year = days - year_start
+
+    month = 1
+    days_in_month = 30 if month % 2 == 1 else 29
+    while day_of_year >= days_in_month:
+        day_of_year -= days_in_month
+        month += 1
+        if month == 12 and (hijri_year % 30) in (2, 5, 7, 10, 13, 16, 18, 21, 24, 26, 29):
+            days_in_month = 30
+        else:
+            days_in_month = 30 if month % 2 == 1 else 29
+
+    return (hijri_year, month, day_of_year + 1)
 
 
 def gregorian_to_hijri(date: datetime.date) -> tuple[int, int, int]:
     """Convert Gregorian date to Hijri (year, month, day).
 
-    Uses tabular Islamic calendar approximation.
+    Approximation using tabular Islamic calendar.
     For Saudi government use, replace with Umm al-Qura calendar data.
     """
-    days_since_epoch = (date - _HIJRI_EPOCH).days
-    hijri_year = int(days_since_epoch / _HIJRI_YEAR_DAYS)
-
-    # Find exact Hijri year
-    while True:
-        year_days = sum(_hijri_month_days(hijri_year, m) for m in range(1, 13))
-        if days_since_epoch < year_days:
-            break
-        days_since_epoch -= year_days
-        hijri_year += 1
-
-    # Find month
-    month = 1
-    while month <= 12:
-        month_days = _hijri_month_days(hijri_year, month)
-        if days_since_epoch < month_days:
-            break
-        days_since_epoch -= month_days
-        month += 1
-
-    day = days_since_epoch + 1
-    return (hijri_year, month, day)
+    return _approx_hijri(date)
 
 
 def hijri_to_gregorian(year: int, month: int, day: int) -> datetime.date:
-    """Convert Hijri (year, month, day) to Gregorian date."""
-    days = 0
-    for y in range(1, year):
-        days += sum(_hijri_month_days(y, m) for m in range(1, 13))
+    """Convert Hijri (year, month, day) to Gregorian date.
+
+    Approximation. For production, use Umm al-Qura calendar data.
+    """
+    epoch = datetime.date(622, 7, 16)
+    total_days = int((year - 1) * 354.36667)
+
+    # Add days for months before current
     for m in range(1, month):
-        days += _hijri_month_days(year, m)
-    days += day - 1
-    return _HIJRI_EPOCH + datetime.timedelta(days=days)
+        total_days += 30 if m % 2 == 1 else 29
+
+    # Add days for leap year adjustment (simplified)
+    leap_days = sum(1 for y in range(1, year) if y % 30 in (2, 5, 7, 10, 13, 16, 18, 21, 24, 26, 29))
+    total_days += leap_days
+
+    # Add days in current month
+    total_days += day - 1
+
+    return epoch + datetime.timedelta(days=total_days)
 
 
 # Hijri month names (Arabic)
