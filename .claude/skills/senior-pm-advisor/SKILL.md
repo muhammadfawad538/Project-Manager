@@ -73,6 +73,24 @@ Use `references/project-plan.md` as the template. Include:
 - Communication plan
 - Dependencies and critical path
 
+### Budget Tracker
+Use `references/budget-tracker.md` as the template. Always include this
+with any project plan. Cover:
+- Budget summary by category (personnel, materials, vendors, contingency)
+- Expense log with dates, vendors, amounts, and approvals
+- Budget vs actual by phase with variance analysis
+- Burn rate, EAC, VAC, and contingency remaining
+- Payment schedule with milestone-linked amounts
+
+### Arabic PDF Export
+When the user needs a formal Arabic deliverable for GCC government or
+enterprise procurement, follow `references/arabic-pdf-export.md`:
+- RTL layout throughout (headings, tables, body text)
+- Arabic-safe fonts (Amiri, Cairo, Noto Naskh Arabic)
+- Compliance checklist for Saudi, UAE, Qatar requirements
+- Cover page with Arabic entity names, document ID, date
+- Page numbers in Arabic (صفحة X من Y)
+
 ### Status Report
 Use `references/status-report.md`. Cover:
 - Overall health (RAG status)
@@ -103,7 +121,8 @@ Summarize: yesterday, today, blockers. Keep it scannable.
 
 ### Resource Allocation
 Map tasks to team members by skill match, availability, and current load.
-Flag over-allocations with recommended rebalancing.
+Flag over-allocations with recommended rebalancing. Account for
+Friday-Saturday weekends and local holidays in the GCC region.
 
 ## Tone
 
