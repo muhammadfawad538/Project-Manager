@@ -1,85 +1,167 @@
+# Line ending: LF
+# Encoding: UTF-8
+
+# pmagent tasks — production-level CrewAI task definitions
+# Tasks chain via `context` so each specialist builds on the prior output.
+# The final task (manager_synthesis) receives all three specialist outputs.
+
 task_breakdown:
   description: >
-    Carefully analyze the project_requirements for the {project_type}
-    project and break them down into individual tasks. Define each
-    task's scope in detail, set achievable timelines, and ensure that
-    all dependencies are accounted for:
+    You are the Project Planner. Given the project requirements below, produce a
+    complete Work Breakdown Structure (WBS).
 
-    Project deadline: {deadline}
+    Follow this process:
+    1. Read the project description, objectives, deadline, and team roster.
+    2. Break the work into 5–15 granular tasks, numbered hierarchically (1.0, 1.1, 1.2, 2.0, …).
+    3. For each task write: a clear name, a one-line description, the owner (from the team roster),
+       estimated hours, a due date (worked back from the deadline), dependencies (task IDs it depends on),
+       and priority (must/should/nice-to-have).
+    4. Group tasks into 3–6 milestones with named deliverables and due dates.
+    5. Compute the critical path: list ALL task IDs from start to finish in dependency order.
+       The critical path is the longest sequence of dependent tasks — any delay in any task
+       on this path delays the whole project. Include every task that has a dependency chain
+       leading to the final milestone. Do not skip any task on the critical path.
+    6. State all assumptions you are making.
 
-    Project requirements:
-
-    {project_requirements}
+    Project type: {project_type}
+    Project objectives: {project_objectives}
+    Industry: {industry}
+    Deadline: {deadline}
 
     Team members:
-
     {team_members}
-  expected_output: >
-    A comprehensive list of tasks with detailed descriptions, timelines,
-    dependencies, and deliverables. Your final output MUST include a
-    Gantt chart or similar timeline visualization specific to the
-    {project_type} project.
-  agent: project_planning_agent
 
-time_resource_estimation:
-  description: >
-    Thoroughly evaluate each task in the {project_type} project to
-    estimate the time, resources, and effort required.
-    Use historical data, task complexity, and available resources to
-    provide a realistic estimation for each task.
+    Requirements:
+    {project_requirements}
+
+    Output language: {output_language}
   expected_output: >
-    A detailed estimation report outlining the time, resources, and
-    effort required for each task in the {project_type} project.
-    Your final report MUST include a summary of any risks or
-    uncertainties associated with the estimations.
-  agent: estimation_agent
+    A complete WBS in {output_language}. ALL headings, table column names,
+    task names, descriptions, milestone names, and notes must be written in
+    {output_language} — do NOT mix English and {output_language} in the same
+    section. The structure must include:
+    - Numbered task table (ID, name, description, owner, hours, due, dependencies, priority)
+    - Milestone table (milestone name, deliverable, due date, task IDs)
+    - Critical path (list of task IDs in order)
+    - Assumptions list
+  agent: project_planner
+  output_pydantic:
+    - WBSOutput
+
+risk_analysis:
+  description: >
+    You are the Risk Analyst. Given the project requirements below, produce a full risk register.
+
+    Follow this process:
+    1. Review the project type, objectives, requirements, and team roster.
+    2. Identify every material risk across these categories:
+       - Technical (technology failure, integration issues)
+       - Team (skill gaps, availability, turnover)
+       - Budget (cost overruns, currency fluctuation for GCC markets)
+       - Schedule (deadline pressure, dependency delays)
+       - Stakeholder (misalignment, approval delays — especially relevant for government projects)
+       - Scope (creep, unclear requirements)
+       - Regulatory (compliance, permits — relevant for Saudi NCA, UAE TDRA, Qatar civil codes)
+    3. For each risk: give it an ID (R1, R2, …), assign probability (High/Medium/Low),
+       impact (High/Medium/Low), an owner, a mitigation plan, a contingency plan,
+       and an early warning trigger.
+    4. Summarize in a risk heat map table and an escalation criteria section.
+
+    Project type: {project_type}
+    Project objectives: {project_objectives}
+    Industry: {industry}
+    Region: GCC (Saudi Arabia, UAE, Qatar, Kuwait, Bahrain, Oman)
+
+    Team members:
+    {team_members}
+
+    Requirements:
+    {project_requirements}
+
+    Output language: {output_language}
+  expected_output: >
+    A complete risk register in {output_language}. ALL headings, table column names,
+    risk descriptions, categories, and notes must be written in {output_language} —
+    do NOT mix English and {output_language}. The structure must include:
+    - Risk summary table (category, count, high-probability, high-impact)
+    - Detailed risk entries (ID, description, category, probability, impact, owner, mitigation, contingency, trigger, status)
+    - Risk response strategy table (avoid/transfer/mitigate/accept)
+    - Escalation criteria
+  agent: risk_analyst
+  context:
+    - task_breakdown
+  output_pydantic:
+    - RiskRegisterOutput
 
 resource_allocation:
   description: >
-    Strategically allocate tasks for the {project_type} project to
-    team members based on their skills, availability, and current
-    workload. Ensure that each task is assigned to the most suitable
-    team member and that the workload is evenly distributed.
+    You are the Resource Allocation Specialist. Given the project requirements and team
+    roster below, assign every task to the best-fit team member.
 
-    IMPORTANT: In your final output, for EVERY task include the
-    "assigned_to" field with the exact team member name from the
-    team list. Do not leave it blank.
+    Follow this process:
+    1. Review the project tasks, their required skills, estimated hours, and due dates.
+    2. For each task, select the team member with the best skill match.
+    3. Check that no team member exceeds their weekly capacity (flag anyone above 90%).
+    4. If someone is overloaded, recommend a rebalancing: which tasks to move to whom.
+    5. Consider GCC-specific constraints: Friday-Saturday weekends, local holidays, prayer-time breaks.
+
+    Produce a resource allocation matrix and a load analysis table.
+
+    Project type: {project_type}
+    Industry: {industry}
+
+    Team members:
+    {team_members}
+
+    Output language: {output_language}
   expected_output: >
-    A structured project plan with tasks allocated to team members,
-    including timelines, milestones, and a summary of resource
-    distribution. Every task must have an assigned team member.
-  agent: resource_allocation_agent
+    A complete resource allocation document in {output_language}. ALL headings,
+    table column names, task names, and notes must be written in {output_language} —
+    do NOT mix English and {output_language}. The structure must include:
+    - Task-to-member mapping table (task, required skills, assigned to, hours, start, due, rationale)
+    - Load analysis table (member, assigned hours, available, utilization %, status)
+    - Overloaded members with rebalancing recommendations
+    - Underutilized members with fill-in suggestions
+  agent: resource_allocator
+  context:
+    - task_breakdown
   output_pydantic:
-    - ProjectPlan
+    - ResourceAllocationOutput
 
-daily_management:
+manager_synthesis:
   description: >
-    You are now running a daily project management cycle for the
-    active project.  Your job is to:
+    You are the Senior PM Manager. Your job is to synthesize the three specialist
+    outputs into a single, polished, bilingual-ready project package.
 
-    1. Use list_projects to find the active project.
-    2. Use get_project to load all tasks, team members, milestones,
-       and recent daily logs.
-    3. Evaluate the current state:
-       • How many tasks are in progress vs. done vs. blocked?
-       • Are there overdue tasks (past their due_date)?
-       • Are there any blockers that have been open too long?
-       • Is any team member overloaded?
-    4. Update task statuses where work has clearly advanced.
-    5. Log today's standup entries for active tasks using
-       log_daily_standup (yesterday, today, blockers, hours worked).
-    6. If progress is significantly behind estimates, consider
-       running run_l1_plan to generate a revised plan.
-    7. If stakeholders need a status update, run run_l2_report to
-       produce a sprint report.
-    8. Run find_blockers to surface any newly blocked or overdue
-       tasks, and recommend immediate actions.
-    9. Summarize everything you did in a short PM report:
-       decisions made, risks found, actions taken, next steps.
+    You receive the outputs from the prior agents via the task context chain.
+    Review them for consistency (task names, IDs, dates, team names must match).
 
-    Always use the tools first — never guess at project state.
-    Your final output must be a markdown PM daily report.
+    Validate the critical path: verify that every task with dependencies appears
+    in the chain, and that no task on the critical path is missing. If the critical
+    path is incomplete, compute the correct one from the WBS dependencies.
+
+    Produce the final deliverables in this exact order:
+    1. Executive Summary (2–3 paragraphs — what, why, when, who)
+    2. Project Plan (goals, scope, WBS table, milestones table, timeline, critical path, assumptions)
+    3. Risk Register (summary table, detailed entries, escalation criteria)
+    4. Resource Allocation (allocation matrix, load analysis, rebalancing if needed)
+    5. Communication Plan (audience, what, format, frequency, owner)
+    6. Next Steps (3–5 concrete actions with owners and dates)
+    7. PM Assessment (overall project health, top 3 risks, one recommendation)
+
+    Project type: {project_type}
+    Project objectives: {project_objectives}
+    Industry: {industry}
+    Output language: {output_language}
   expected_output: >
-    A markdown daily PM report listing project health, tasks updated,
-    blockers found, logs written, decisions taken, and next steps.
-  agent: manager_agent
+    A complete project management package in {output_language}. ALL section headings,
+    table column names, narrative text, and notes must be written in {output_language} —
+    do NOT mix English and {output_language} anywhere. The package must contain
+    all sections listed above, with all task IDs, names, and team members consistent
+    across sections. Output must be ready to hand to a project team for immediate
+    execution — fully localized in {output_language}.
+  agent: manager
+  context:
+    - task_breakdown
+    - risk_analysis
+    - resource_allocation

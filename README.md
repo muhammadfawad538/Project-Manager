@@ -1,64 +1,99 @@
-# AI Project Planners
+# pmagent — AI-Powered Project Management
 
-Production-ready multi-agent system that automates project planning, time/resource estimation, and team allocation using CrewAI and a Groq-accelerated LLM.
+CrewAI-based multi-agent system for project planning, risk management, and resource allocation. Built for the GCC market with bilingual (Arabic + English) document generation.
 
-## Problem it solves
+## What it does
 
-Manually breaking down projects into tasks, estimating timelines, and assigning team members is slow, inconsistent, and error-prone. This project replaces that with a 3-agent CrewAI pipeline: feed it raw project requirements and team info, and it produces a structured, Pydantic-validated project plan with task breakdowns, hour-level estimates, and evenly-distributed resource assignments in one run.
+Give it a project brief — it returns a complete PM package:
 
-## Quick start
+- **Work Breakdown Structure** — numbered tasks, estimates, dependencies, milestones
+- **Risk Register** — identified risks with probability, impact, mitigation, contingency
+- **Resource Allocation** — task-to-member mapping with load analysis and rebalancing
+- **Executive Summary** — ready to hand to stakeholders
+
+## Quick Start
 
 ```bash
-cp .env.example .env            # add your OPENAI_API_KEY
+# 1. Clone and install
+git clone <repo-url>
+cd project-management
 pip install -r requirements.txt
-python -m pmagent.main          # run the crew
+
+# 2. Set your OpenAI key
+cp .env.example .env
+# Edit .env and add your OPENAI_API_KEY
+
+# 3. Run via CLI
+python -m pmagent.main
+
+# 4. Or run the API server
+python -m api.main
+# Then POST to http://localhost:8000/plan
+
+# 5. Or use the skill
+# Just say "I need a project plan for..." and the senior-pm-advisor
+# skill will trigger automatically.
 ```
 
-Or with the CrewAI CLI:
-
-```bash
-crewai run
-```
-
-## How it works
-
-Three specialized agents run in sequence:
-
-| Agent | Role |
-|-------|------|
-| **Project Planner** | Breaks project requirements into granular tasks with timelines and dependencies |
-| **Estimation Analyst** | Estimates hours, resources, and effort per task; flags risks |
-| **Resource Allocator** | Assigns tasks to team members by skill match and workload balance |
-
-Output is validated through a `ProjectPlan` Pydantic model (tasks + milestones) and printed as formatted tables.
-
-## Structure
+## Project Structure
 
 ```
 src/pmagent/
-  main.py               crew assembly + kickoff
-  helper.py             utility helpers
-  config/
-    agents.yaml           agent definitions (role, goal, backstory)
-    tasks.yaml            task definitions, expected output, agent binding
-tests/
-  test_main.py           smoke tests for crew wiring
-  conftest.py            test fixtures
+├── __init__.py
+├── main.py              # Crew assembly, kickoff(), CLI entry point
+├── config/
+│   ├── __init__.py      # Loads agents.yaml + tasks.yaml, builds CrewAI objects
+│   ├── agents.yaml      # 4 agent definitions (planner, risk, resource, manager)
+│   ├── tasks.yaml       # 4 chained tasks with Pydantic output validation
+│   └── models.py        # Pydantic models for structured output
+├── tools/
+│   ├── __init__.py
+│   └── pm_tools.py      # Custom CrewAI tools (DB-backed: CRUD, blockers, logs)
+└── db/
+    ├── __init__.py
+    ├── session.py       # SQLAlchemy engine + session factory
+    ├── models.py        # ORM models: Project, Task, TeamMember, Milestone, etc.
+    └── repository.py    # Database CRUD functions
+
+api/
+├── main.py              # FastAPI server: POST /plan, GET /health
+└── requirements.txt     # API-specific deps
+
+test_bilingual.py        # Test runner: English + Arabic side-by-side
+test_outputs/            # Generated test results (gitignored)
+
+.claude/skills/
+└── senior-pm-advisor/   # The PM advisor skill (triggers on "I need a project plan")
+    ├── SKILL.md
+    └── references/      # PM document templates (plan, status report, risk, sprint)
 ```
 
-## Tech
+## Architecture
 
-- [CrewAI](https://docs.crewai.com) — multi-agent orchestration
-- [Groq](https://groq.com) — fast LLM inference (`gpt-4o-mini`)
-- Pydantic v2 — structured output validation
-- YAML config — agent and task definitions loaded at runtime
-- Pandas — usage metrics and result formatting
+4 agents in a sequential crew:
 
-## Env vars
+| Agent | Role | Output |
+|-------|------|--------|
+| `project_planner` | Breaks requirements into WBS | Tasks, milestones, critical path |
+| `risk_analyst` | Identifies and assesses risks | Risk register with mitigation plans |
+| `resource_allocator` | Assigns tasks to team members | Allocation matrix + load analysis |
+| `manager` | Synthesizes all outputs | Final PM package (all sections) |
 
-| Variable | Description |
-|----------|-------------|
-| `OPENAI_API_KEY` | Your OpenAI API key (required) |
+Each specialist produces **validated structured output** (Pydantic) that feeds the next agent.
+
+## Tech Stack
+
+- **CrewAI** — multi-agent orchestration
+- **OpenAI GPT-4o** — LLM (configurable)
+- **SQLAlchemy** — ORM + SQLite
+- **Pydantic** — structured output validation
+- **FastAPI** — REST API server (`POST /plan`, `GET /health`)
+
+## Requirements
+
+- Python 3.10+
+- OpenAI API key
+- See `requirements.txt`
 
 ## License
 

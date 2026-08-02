@@ -1,208 +1,164 @@
-"""
-Vercel serverless entrypoint for pmagent.
+# Line ending: LF
+# Encoding: UTF-8
 
-Uses direct OpenAI API calls instead of CrewAI to keep the bundle under 500MB.
-Produces the same structured output (tasks, milestones, estimates, assignments).
 """
-import json
-import os
+pmagent API — FastAPI server for the AI project management crew.
+
+Endpoints:
+    POST /plan       Run the planning crew, return structured PM package
+    GET  /health     Health check
+
+Environment:
+    OPENAI_API_KEY   Required. Set in .env or environment.
+"""
+
+from __future__ import annotations
+
 import sys
+import warnings
+
+warnings.filterwarnings("ignore")
+
+# Ensure UTF-8 stdout for Arabic output
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load .env from project root (one level up from api/)
+_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(_ENV_PATH)
+
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from typing import Optional
 
-# ── Path setup ─────────────────────────────────────────────────────────────────
+# ── 0. Env check ──────────────────────────────────────────────────────────────
 
-_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-_src_dir = os.path.join(_project_root, "src")
-if _src_dir not in sys.path:
-    sys.path.insert(0, _src_dir)
-if _project_root not in sys.path:
-    sys.path.insert(0, _project_root)
+api_key = os.environ.get("OPENAI_API_KEY", "")
+if not api_key or api_key == "your_openai_key_here":
+    # We don't hard-fail here so the server can start and return 500 on /plan
+    pass
 
-app = FastAPI(title="pmagent – AI Project Planning API")
+os.environ.setdefault("OPENAI_MODEL_NAME", os.environ.get("OPENAI_MODEL_NAME", "gpt-4o-mini"))
+
+# ── 1. App setup ──────────────────────────────────────────────────────────────
+
+app = FastAPI(
+    title="pmagent API",
+    description="AI-powered project planning, risk analysis, and resource allocation via CrewAI.",
+    version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # tighten in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-# ── Schemas ────────────────────────────────────────────────────────────────────
+# ── 2. Request / Response models ──────────────────────────────────────────────
 
-class ProjectInput(BaseModel):
-    project_type: str = Field(default="Website", description="Type of project")
-    project_objectives: str = Field(
-        default="Create a website for a small business",
-        description="High-level project objectives",
-    )
-    industry: str = Field(default="Technology", description="Industry sector")
-    deadline: str = Field(default="3 days", description="Project deadline")
+class ProjectRequest(BaseModel):
+    """Incoming project description from the client."""
+
+    project_type: str = Field(..., description="Type of project (e.g. 'CRM Implementation')")
+    project_objectives: str = Field(..., description="Primary goal and success criteria")
+    industry: str = Field(..., description="Industry vertical")
+    deadline: str = Field(..., description="Project deadline (e.g. '6 months')")
+    output_language: str = Field(default="English", description="Output language: 'English' or 'Arabic'")
     team_members: str = Field(
         default="",
-        description="Plain-text list of team members with roles, e.g. '- Ali (Engineer)'",
+        description="Newline-separated list: '- Name (Role)'",
     )
     project_requirements: str = Field(
         default="",
-        description="Plain-text list of requirements",
+        description="Bullet list of deliverables and requirements",
     )
 
 
-class TaskOut(BaseModel):
-    task_name: str
-    estimated_time_hours: float
-    required_resources: list[str] = Field(default_factory=list)
-    assigned_to: str = ""
+class ErrorResponse(BaseModel):
+    error: str
+    detail: Optional[str] = None
 
 
-class MilestoneOut(BaseModel):
-    milestone_name: str
-    tasks: list[str] = Field(default_factory=list)
+# ── 3. Lazy crew initialization ───────────────────────────────────────────────
+
+# Import inside the endpoint so the server can start quickly;
+# the crew is built on first request and cached thereafter.
+_crew = None
 
 
-class ProjectPlanResponse(BaseModel):
-    tasks: list[TaskOut]
-    milestones: list[MilestoneOut]
-    raw: str = ""
+def _get_crew():
+    global _crew
+    if _crew is None:
+        from pmagent.main import crew
+        _crew = crew
+    return _crew
 
 
-# ── Prompt ─────────────────────────────────────────────────────────────────────
-
-_SYSTEM_PROMPT = """\
-You are a senior project manager AI with three specialized sub-agents.
-
-Given a project description, team, requirements, and deadline, produce a structured plan.
-
-Follow these three phases in your reasoning:
-
-1. PROJECT PLANNER: Break requirements into granular tasks. For each task give:
-   - A clear name
-   - Estimated hours
-   - Dependencies / order (sequence them logically)
-   - Which team member should do it (match by role/skill)
-
-2. ESTIMATION ANALYST: Review each task for realistic hour estimates.
-   Consider complexity, team member skill, and dependencies. Flag risks.
-
-3. RESOURCE ALLOCATOR: Finalize assignments. Distribute work evenly across
-   team members. No one person should be overloaded.
-
-Output ONLY valid JSON matching this exact schema:
-{
-  "tasks": [
-    {
-      "task_name": "string",
-      "estimated_time_hours": number,
-      "required_resources": ["string"],
-      "assigned_to": "string (team member name exactly as provided)"
-    }
-  ],
-  "milestones": [
-    {
-      "milestone_name": "string",
-      "tasks": ["string (task names belonging to this milestone)"]
-    }
-  ]
-}
-
-Rules:
-- Every task MUST have assigned_to set to an exact team member name from the input
-- Tasks should be in execution order (dependencies first)
-- estimated_time_hours must be a number (not a range)
-- milestone tasks arrays must reference task_name values exactly
-- Do NOT include markdown formatting, explanations, or extra fields
-- Respond ONLY with the JSON object
-"""
+# ── 4. Routes ─────────────────────────────────────────────────────────────────
 
 
-# ── OpenAI call ────────────────────────────────────────────────────────────────
-
-def _call_openai(user_content: str) -> dict:
-    api_key = os.environ.get("OPENAI_API_KEY", "")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="OPENAI_API_KEY is not configured.")
-
-    try:
-        from openai import OpenAI
-    except ImportError as exc:
-        raise HTTPException(status_code=500, detail=f"openai package not installed: {exc}") from exc
-
-    model = os.environ.get("OPENAI_MODEL_NAME", "gpt-4o-mini")
-    client = OpenAI(api_key=api_key)
-
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            temperature=0.4,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": user_content},
-            ],
-            response_format={"type": "json_object"},
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"LLM call failed: {exc}") from exc
-
-    usage = {}
-    if hasattr(response, "usage") and response.usage:
-        usage = {
-            "prompt_tokens": getattr(response.usage, "prompt_tokens", 0),
-            "completion_tokens": getattr(response.usage, "completion_tokens", 0),
-        }
-
-    raw = response.choices[0].message.content or "{}"
-    try:
-        plan = json.loads(raw)
-    except json.JSONDecodeError:
-        plan = {}
-
-    # Normalize into expected shape
-    tasks = [
-        TaskOut(
-            task_name=t.get("task_name", ""),
-            estimated_time_hours=float(t.get("estimated_time_hours") or 0),
-            required_resources=t.get("required_resources", []) or [],
-            assigned_to=t.get("assigned_to", "") or "",
-        ).model_dump()
-        for t in plan.get("tasks", [])
-    ]
-
-    milestones = [
-        MilestoneOut(
-            milestone_name=m.get("milestone_name", ""),
-            tasks=m.get("tasks", []) or [],
-        ).model_dump()
-        for m in plan.get("milestones", [])
-    ]
-
-    pt = usage.get("prompt_tokens", 0)
-    ct = usage.get("completion_tokens", 0)
-    cost = 0.050 * (pt + ct) / 1_000_000
-
-    return {
-        "tasks": tasks,
-        "milestones": milestones,
-        "raw": raw,
-        "usage_metrics": {**usage, "estimated_cost_usd": round(cost, 6)},
-    }
-
-
-# ── Routes ─────────────────────────────────────────────────────────────────────
-
-@app.get("/", tags=["health"])
-def health():
+@app.get("/health")
+async def health() -> dict:
+    """Health check endpoint."""
     return {"status": "ok", "service": "pmagent"}
 
 
-@app.post("/plan", response_model=ProjectPlanResponse, tags=["planning"])
-def generate_plan(payload: ProjectInput):
-    user_content = f"""\
-Project: {payload.project_type}
-Objective: {payload.project_objectives}
-Industry: {payload.industry}
-Deadline: {payload.deadline}
+@app.post(
+    "/plan",
+    responses={
+        200: {"description": "Project plan generated successfully"},
+        400: {"model": ErrorResponse, "description": "Missing required fields"},
+        500: {"model": ErrorResponse, "description": "Server error during crew execution"},
+    },
+)
+async def generate_plan(request: ProjectRequest) -> dict:
+    """Run the CrewAI planning crew and return a structured PM package.
 
-Team members:
-{payload.team_members}
+    Returns:
+        JSON with keys:
+            raw_output (str): Full markdown report from the manager agent
+            wbs (dict): Structured WBS with tasks, milestones, critical path
+            risks (dict): Structured risk register
+            resources (dict): Structured resource allocation
+            critical_path (dict): Algorithmic critical path (tasks, floats, duration)
+            usage (dict): LLM token usage
+            cost_usd (float): Estimated API cost
+    """
+    if not api_key or api_key == "your_openai_key_here":
+        raise HTTPException(
+            status_code=500,
+            detail="OPENAI_API_KEY is not configured. Set it in .env or environment variables.",
+        )
 
-Requirements:
-{payload.project_requirements}
-"""
-    result = _call_openai(user_content)
-    return ProjectPlanResponse(**result)
+    crew = _get_crew()
+
+    inputs = {
+        "project_type": request.project_type,
+        "project_objectives": request.project_objectives,
+        "industry": request.industry,
+        "deadline": request.deadline,
+        "output_language": request.output_language,
+        "team_members": request.team_members,
+        "project_requirements": request.project_requirements,
+    }
+
+    try:
+        from pmagent.main import kickoff
+
+        result = kickoff(inputs=inputs)
+        return result
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Crew execution failed: {exc}",
+        ) from exc

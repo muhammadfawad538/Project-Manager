@@ -1,24 +1,31 @@
 # Python
 __pycache__/
-*.py[cod]
+*.pyc
+*.egg-info/
 dist/
 build/
-.eggs/
-*.egg-info
+*.egg
 
-# Env
-.env
-.env.*
-
-# Database
-data/
-*.db
-*.sqlite
-*.sqlite3
-
-# Caches
-.pytest_cache/
+# Virtual environments
+.venv/
+venv/
+env/
 
 # IDE
-.idea/
 .vscode/
+.idea/
+
+# Environment
+.env
+.env.local
+
+# Database
+data/app.db
+*.db
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Vercel
+.vercel/

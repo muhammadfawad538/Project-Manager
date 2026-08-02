@@ -2,111 +2,58 @@
 # Encoding: UTF-8
 
 """
-Database session management and engine setup.
+SQLAlchemy session management for pmagent.
 
 Usage:
-    from pmagent.db.session import create_db, get_session, drop_db
+    from pmagent.db.session import get_session, create_db
 
-    # First-run setup
-    create_db()  # creates tables if they don't exist
-    drop_db()    # drops all tables (destructive)
-
-    # In application code
-    with get_session() as session:
-        ...
+    create_db()                           # run once at startup
+    with get_session() as session: ...    # use in request handlers / tools
 """
+
+from __future__ import annotations
 
 import os
 from contextlib import contextmanager
-from typing import Generator
+from pathlib import Path
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 
 from pmagent.db.models import Base
 
-# ---------------------------------------------------------------------------
-# Engine / Session factory
-# Default: SQLite file ``data/app.db`` under the project root.
-# On Vercel / production: use DATABASE_URL env var (Postgres via Vercel Postgres).
-# ---------------------------------------------------------------------------
-
-_DEFAULT_DB_PATH = "sqlite:///data/app.db"
+_DEFAULT_DB_PATH = "data/app.db"
 
 
 def _get_database_url() -> str:
-    """Return the DB URL from env or the default SQLite path.
-
-    Priority:
-      1. DATABASE_URL env var (Postgres on Vercel, custom SQLite path, etc.)
-      2. Default SQLite file at data/app.db
-    """
-    url = os.environ.get("DATABASE_URL", "").strip()
-    if url:
-        return url
-    # Ensure data/ directory exists for SQLite
-    db_path = "data/app.db"
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    return f"sqlite:///{db_path}"
+    env_url = os.environ.get("DATABASE_URL")
+    if env_url:
+        return env_url
+    # Default to SQLite file in data/ directory
+    Path(_DEFAULT_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+    return f"sqlite:///{_DEFAULT_DB_PATH}"
 
 
-DATABASE_URL: str = _get_database_url()
+# Module-level engine — created once on import
+_ENGINE = create_engine(
+    _get_database_url(),
+    connect_args={"check_same_thread": False},
+    echo=False,
+)
 
+# Session factory
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_ENGINE)
 
-def _engine_kwargs() -> dict:
-    """Build engine kwargs based on the database dialect."""
-    is_sqlite = DATABASE_URL.startswith("sqlite")
-    return {
-        "echo": False,  # set True for SQL debug logging
-        "connect_args": {"check_same_thread": False} if is_sqlite else {},
-        # Postgres connection pool settings for serverless (Vercel)
-        "pool_pre_ping": True,
-        "pool_recycle": 300,
-    }
-
-
-engine = create_engine(DATABASE_URL, **_engine_kwargs())
-
-# Auto-create tables on first engine use so callers don't have to remember create_db()
-# Safe to call multiple times — idempotent.
-Base.metadata.create_all(bind=engine)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def create_db() -> None:
     """Create all tables if they don't exist."""
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=_ENGINE)
 
-
-def drop_db() -> None:
-    """Drop all tables.  **Destructive — use with care.**"""
-    Base.metadata.drop_all(bind=engine)
-
-
-def list_tables() -> list[str]:
-    """Return a list of table names in the current DB."""
-    return Base.metadata.tables.keys()
-
-
-# ---------------------------------------------------------------------------
-# Session context manager
-# ---------------------------------------------------------------------------
 
 @contextmanager
-def get_session() -> Generator[Session, None, None]:
-    """
-    Provide a transactional scope around a series of operations.
-
-    Example:
-        with get_session() as session:
-            task = session.query(Task).first()
-    """
-    session: Session = SessionLocal()
+def get_session() -> Session:
+    """Yield a database session. Use as a context manager: `with get_session() as s:`"""
+    session = SessionLocal()
     try:
         yield session
         session.commit()
@@ -115,3 +62,8 @@ def get_session() -> Generator[Session, None, None]:
         raise
     finally:
         session.close()
+
+
+def _get_database_url_public() -> str:
+    """Public accessor for showing DB info in UI/logs (redacts password)."""
+    return _get_database_url()
