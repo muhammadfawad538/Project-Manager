@@ -72,6 +72,8 @@ class ProjectRequest(BaseModel):
     project_objectives: str = Field(..., description="Primary goal and success criteria")
     industry: str = Field(..., description="Industry vertical")
     deadline: str = Field(..., description="Project deadline (e.g. '6 months')")
+    country: str = Field(default="Saudi Arabia", description="GCC country for localization")
+    currency: str = Field(default="SAR", description="Currency code: SAR, AED, QAR, KWD, BHD, OMR, USD")
     output_language: str = Field(default="English", description="Output language: 'English' or 'Arabic'")
     team_members: str = Field(
         default="",
@@ -161,4 +163,127 @@ async def generate_plan(request: ProjectRequest) -> dict:
         raise HTTPException(
             status_code=500,
             detail=f"Crew execution failed: {exc}",
+        ) from exc
+
+
+# ── 5. Export endpoints ────────────────────────────────────────────────────────
+
+
+class ExportRequest(BaseModel):
+    """Request body for export endpoints."""
+
+    project_name: str = Field(default="Project", description="Name for the exported file")
+    format: str = Field(default="xml", description="Export format: 'xml' (MS Project), 'csv', 'html' (Arabic PDF)")
+
+
+@app.post("/plan/{project_id}/export")
+async def export_plan(project_id: int, request: ExportRequest) -> dict:
+    """Export a saved project plan in MS Project XML, CSV, or Arabic PDF.
+
+    Args:
+        project_id: ID of the saved project
+        request: Export format and project name
+
+    Returns:
+        JSON with download_url, format, and file metadata
+    """
+    from pmagent.db.session import get_session
+    from pmagent.db.repository import get_project_tasks
+    from pmagent.exports import export_msproject_xml, export_wbs_csv, export_arabic_pdf
+    from pathlib import Path
+
+    fmt = request.format.lower()
+    project_name = request.project_name or f"project_{project_id}"
+
+    # Load tasks from DB
+    with get_session() as s:
+        tasks = get_project_tasks(s, project_id)
+        if not tasks:
+            raise HTTPException(status_code=404, detail=f"No tasks found for project {project_id}")
+
+    # Convert ORM tasks to dicts
+    task_dicts = []
+    for t in tasks:
+        deps = []
+        if t.dependencies:
+            deps = [d.strip() for d in t.dependencies.split(",") if d.strip()]
+        task_dicts.append({
+            "id": str(t.id),
+            "name": t.name,
+            "description": t.description or "",
+            "owner": t.assigned_to.name if t.assigned_to else "",
+            "estimated_hours": t.estimated_hours,
+            "due_date": t.due_date.strftime("%Y-%m-%d") if t.due_date else "",
+            "dependencies": deps,
+            "priority": t.priority.value,
+        })
+
+    # Export directory
+    export_dir = Path("data/exports")
+    export_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        if fmt == "xml":
+            content = export_msproject_xml(task_dicts, project_name)
+            filename = f"{project_name.replace(' ', '_')}.xml"
+            filepath = export_dir / filename
+            filepath.write_text(content, encoding="utf-8")
+            return {
+                "format": "xml",
+                "filename": filename,
+                "download_url": f"/exports/{filename}",
+                "task_count": len(task_dicts),
+                "message": "MS Project XML exported successfully. Open in MS Project.",
+            }
+
+        elif fmt == "csv":
+            content = export_wbs_csv(task_dicts)
+            filename = f"{project_name.replace(' ', '_')}.csv"
+            filepath = export_dir / filename
+            filepath.write_text(content, encoding="utf-8")
+            return {
+                "format": "csv",
+                "filename": filename,
+                "download_url": f"/exports/{filename}",
+                "task_count": len(task_dicts),
+                "message": "CSV exported successfully. Open in Excel.",
+            }
+
+        elif fmt == "html":
+            # Generate Arabic HTML from the latest plan
+            from pmagent.db.repository import get_project
+            with get_session() as s:
+                project = get_project(s, project_id)
+
+            if not project:
+                raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
+
+            # Build a simple Arabic HTML summary
+            from pmagent.exports.arabic_pdf import markdown_to_html_rtl
+            arabic_md = f"# {project_name}\n\n## ملخص المشروع\n\n{project.objectives or ''}\n\n## المهام\n\n"
+            for t in task_dicts:
+                arabic_md += f"- **{t['name']}** ({t['owner']}) - {t['estimated_hours']}h\n"
+
+            filename = f"{project_name.replace(' ', '_')}_arabic.html"
+            filepath = export_dir / filename
+            html_content = markdown_to_html_rtl(arabic_md, project_name)
+            filepath.write_text(html_content, encoding="utf-8")
+            return {
+                "format": "html",
+                "filename": filename,
+                "download_url": f"/exports/{filename}",
+                "task_count": len(task_dicts),
+                "message": "Arabic HTML generated. Open in browser or convert to PDF.",
+            }
+
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported format: {fmt}. Use 'xml', 'csv', or 'html'.",
+            )
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Export failed: {exc}",
         ) from exc
