@@ -103,12 +103,17 @@ resource_allocation:
     2. For each task, select the team member with the best skill match.
     3. Check that no team member exceeds their weekly capacity (flag anyone above 90%).
     4. If someone is overloaded, recommend a rebalancing: which tasks to move to whom.
-    5. Consider GCC-specific constraints: Friday-Saturday weekends, local holidays, prayer-time breaks.
-
-    Produce a resource allocation matrix and a load analysis table.
+    5. Consider GCC-specific constraints for this project:
+       - Weekend: Friday-Saturday (Sun-Thu work week) for {country}
+       - Local holidays: {country} public holidays
+       - Working hours: 8 hours/day, Sun-Thu only
+    6. Adjust task schedules to exclude weekends and holidays when calculating
+       due dates and task durations.
 
     Project type: {project_type}
     Industry: {industry}
+    Country: {country}
+    Currency: {currency}
 
     Team members:
     {team_members}

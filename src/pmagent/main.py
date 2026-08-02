@@ -120,29 +120,32 @@ crew = Crew(
 # ── 6. Default inputs ─────────────────────────────────────────────────────────
 
 DEFAULT_INPUTS = {
-    "project_type": "Residential Construction – 20-Marla Plot",
-    "project_objectives": "Complete construction of a 2-story house on a 20-marla plot within 3 months",
-    "industry": "Construction",
-    "deadline": "3 months",
+    "project_type": "Enterprise CRM System Implementation",
+    "project_objectives": "Implement a CRM system for 500+ users across 3 departments within 6 months",
+    "industry": "Technology / Software",
+    "deadline": "6 months",
+    "country": "Saudi Arabia",
+    "currency": "SAR",
     "output_language": "English",
     "team_members": """
-- Ali (Site Engineer)
-- Ahmed (Carpenter / Steel Worker)
-- Usman (Electrician)
-- Hassan (Plumber)
-- Bilal (General Laborer)
+- Sara (Project Manager)
+- Khalid (Backend Developer)
+- Noura (Frontend Developer)
+- Faisal (QA Engineer)
+- Laila (DevOps Engineer)
+- Omar (Business Analyst)
 """,
     "project_requirements": """
-- Excavation and foundation work
-- Column and beam reinforcement and casting
-- Brick masonry and wall construction
-- Roof slab casting
-- Electrical wiring and conduit installation
-- Plumbing pipework and drainage
-- Window and door frame installation
-- Interior and exterior plastering
-- Flooring (marble/tiles)
-- Paint and finishing
+- Requirements gathering and stakeholder interviews
+- Backend RESTful API development
+- Frontend React dashboard development
+- Database design and migration
+- User authentication and RBAC
+- Integration with ERP and email systems
+- Automated testing and CI/CD pipeline
+- User training and documentation
+- Phased rollout to 3 departments
+- Post-launch support and bug fixing
 """,
 }
 
