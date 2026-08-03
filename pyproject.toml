@@ -37,3 +37,6 @@ where = ["src"]
 # CrewAI project config
 name = "pmagent"
 version = "0.1.0"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

@@ -37,6 +37,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
+from pmagent.db.session import get_session
+
 # ── 0. Env check ──────────────────────────────────────────────────────────────
 
 api_key = os.environ.get("OPENAI_API_KEY", "")
@@ -324,11 +326,7 @@ async def list_issues(project_id: int, status: Optional[str] = None) -> dict:
 
     with get_session() as s:
         issues = get_project_issues(s, project_id, status=st)
-
-    return {
-        "project_id": project_id,
-        "count": len(issues),
-        "issues": [
+        issues_data = [
             {
                 "id": i.id,
                 "title": i.title,
@@ -343,7 +341,12 @@ async def list_issues(project_id: int, status: Optional[str] = None) -> dict:
                 "resolved_at": i.resolved_at.isoformat() if i.resolved_at else None,
             }
             for i in issues
-        ],
+        ]
+
+    return {
+        "project_id": project_id,
+        "count": len(issues_data),
+        "issues": issues_data,
     }
 
 
@@ -362,13 +365,16 @@ async def create_issue(project_id: int, request: IssueCreateRequest) -> dict:
             task_id=request.task_id,
             reported_by_id=request.reported_by_id,
         )
+        issue_id = issue.id
+        status_val = issue.status.value
+        priority_val = issue.priority.value
     return {
-        "id": issue.id,
-        "project_id": issue.project_id,
-        "title": issue.title,
-        "priority": issue.priority.value,
-        "status": issue.status.value,
-        "message": f"Issue #{issue.id} logged.",
+        "id": issue_id,
+        "project_id": project_id,
+        "title": request.title,
+        "priority": priority_val,
+        "status": status_val,
+        "message": f"Issue #{issue_id} logged.",
     }
 
 
@@ -385,11 +391,11 @@ async def update_issue_status(issue_id: int, request: IssueUpdateStatusRequest) 
 
     with get_session() as s:
         issue = update_issue_status(s, issue_id, st, resolution_notes=request.resolution_notes)
+        if not issue:
+            raise HTTPException(status_code=404, detail=f"Issue #{issue_id} not found")
+        status_val = issue.status.value
 
-    if not issue:
-        raise HTTPException(status_code=404, detail=f"Issue #{issue_id} not found")
-
-    return {"id": issue.id, "status": issue.status.value, "message": f"Issue #{issue_id} updated."}
+    return {"id": issue_id, "status": status_val, "message": f"Issue #{issue_id} updated."}
 
 
 @app.put("/issues/{issue_id}/assign")
@@ -399,11 +405,11 @@ async def assign_issue(issue_id: int, request: IssueAssignRequest) -> dict:
 
     with get_session() as s:
         issue = assign_issue(s, issue_id, request.member_id)
+        if not issue:
+            raise HTTPException(status_code=404, detail=f"Issue #{issue_id} not found")
+        assigned_to_id = issue.assigned_to_id
 
-    if not issue:
-        raise HTTPException(status_code=404, detail=f"Issue #{issue_id} not found")
-
-    return {"id": issue.id, "assigned_to_id": issue.assigned_to_id, "message": f"Issue #{issue_id} assigned."}
+    return {"id": issue_id, "assigned_to_id": assigned_to_id, "message": f"Issue #{issue_id} assigned."}
 
 
 # ── 7. Change Request endpoints ───────────────────────────────────────────────
@@ -437,11 +443,7 @@ async def list_change_requests(project_id: int, status: Optional[str] = None) ->
 
     with get_session() as s:
         crs = get_project_change_requests(s, project_id, status=st)
-
-    return {
-        "project_id": project_id,
-        "count": len(crs),
-        "change_requests": [
+        change_requests = [
             {
                 "id": cr.id,
                 "title": cr.title,
@@ -456,7 +458,12 @@ async def list_change_requests(project_id: int, status: Optional[str] = None) ->
                 "implemented_at": cr.implemented_at.isoformat() if cr.implemented_at else None,
             }
             for cr in crs
-        ],
+        ]
+
+    return {
+        "project_id": project_id,
+        "count": len(change_requests),
+        "change_requests": change_requests,
     }
 
 
@@ -475,13 +482,16 @@ async def create_change_request(project_id: int, request: ChangeRequestCreateReq
             impact_scope=request.impact_scope,
             submitted_by_id=request.submitted_by_id,
         )
+        cr_id = cr.id
+        cr_status = cr.status.value
 
     return {
-        "id": cr.id,
-        "project_id": cr.project_id,
-        "title": cr.title,
-        "status": cr.status.value,
-        "message": f"Change Request #{cr.id} submitted.",
+        "id": cr_id,
+        "project_id": project_id,
+        "title": request.title,
+        "status": cr_status,
+        "impact_scope": request.impact_scope,
+        "message": f"Change Request #{cr_id} submitted.",
     }
 
 
@@ -498,8 +508,8 @@ async def update_change_request_status(cr_id: int, request: ChangeRequestUpdateS
 
     with get_session() as s:
         cr = update_change_request_status(s, cr_id, st, approved_by_id=request.approved_by_id)
+        if not cr:
+            raise HTTPException(status_code=404, detail=f"Change Request #{cr_id} not found")
+        cr_status = cr.status.value
 
-    if not cr:
-        raise HTTPException(status_code=404, detail=f"Change Request #{cr_id} not found")
-
-    return {"id": cr.id, "status": cr.status.value, "message": f"Change Request #{cr_id} updated."}
+    return {"id": cr_id, "status": cr_status, "message": f"Change Request #{cr_id} updated."}
