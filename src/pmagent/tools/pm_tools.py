@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from pydantic import BaseModel, Field
 from crewai.tools import BaseTool
 
 from pmagent.db.models import ProjectStatus, TaskStatus, IssueStatus, IssuePriority, ChangeRequestStatus
@@ -274,14 +275,35 @@ class CreateProjectTool(BaseTool):
 # ── Issue Log Tools ────────────────────────────────────────────────────────────
 
 
+class CreateIssueSchema(BaseModel):
+    project_id: int = Field(..., description="Project ID")
+    title: str = Field(..., description="Issue title")
+    description: str = Field(default="", description="Issue description")
+    priority: str = Field(default="medium", description="Priority: low/medium/high/critical")
+    task_id: int = Field(default=0, description="Optional task ID")
+    reported_by_id: int = Field(default=0, description="Optional reporter member ID")
+
+
+class ListIssuesSchema(BaseModel):
+    project_id: int = Field(..., description="Project ID")
+    status: str = Field(default="", description="Optional status filter")
+
+
+class UpdateIssueStatusSchema(BaseModel):
+    issue_id: int = Field(..., description="Issue ID")
+    status: str = Field(..., description="New status: open/in_progress/resolved/closed")
+    resolution_notes: str = Field(default="", description="Optional resolution notes")
+
+
+class AssignIssueSchema(BaseModel):
+    issue_id: int = Field(..., description="Issue ID")
+    member_id: int = Field(..., description="Team member ID to assign to")
+
+
 class CreateIssueTool(BaseTool):
     name: str = "create_issue"
-    description: str = (
-        "Log a new issue in the project. "
-        "Args: project_id, title, description (opt), priority (low/medium/high/critical), "
-        "task_id (opt), reported_by_id (opt). "
-        "Returns: issue ID and confirmation."
-    )
+    description: str = "Log a new issue in the project."
+    args_schema: type = CreateIssueSchema
 
     def _run(
         self,
@@ -309,11 +331,8 @@ class CreateIssueTool(BaseTool):
 
 class ListIssuesTool(BaseTool):
     name: str = "list_issues"
-    description: str = (
-        "List issues for a project. "
-        "Args: project_id, status (opt: open/in_progress/resolved/closed). "
-        "Returns: issue summary with title, status, priority, assignee."
-    )
+    description: str = "List issues for a project."
+    args_schema: type = ListIssuesSchema
 
     def _run(self, project_id: int = 0, status: str = "") -> str:
         if not project_id:
@@ -339,10 +358,8 @@ class ListIssuesTool(BaseTool):
 
 class UpdateIssueStatusTool(BaseTool):
     name: str = "update_issue_status"
-    description: str = (
-        "Update an issue's status. "
-        "Args: issue_id, status (open/in_progress/resolved/closed), resolution_notes (opt)."
-    )
+    description: str = "Update an issue's status."
+    args_schema: type = UpdateIssueStatusSchema
 
     def _run(self, issue_id: int = 0, status: str = "", resolution_notes: str = "") -> str:
         if not issue_id or not status:
@@ -360,10 +377,8 @@ class UpdateIssueStatusTool(BaseTool):
 
 class AssignIssueTool(BaseTool):
     name: str = "assign_issue"
-    description: str = (
-        "Assign an issue to a team member. "
-        "Args: issue_id, member_id."
-    )
+    description: str = "Assign an issue to a team member."
+    args_schema: type = AssignIssueSchema
 
     def _run(self, issue_id: int = 0, member_id: int = 0) -> str:
         if not issue_id or not member_id:
@@ -378,14 +393,30 @@ class AssignIssueTool(BaseTool):
 # ── Change Request Tools ──────────────────────────────────────────────────────
 
 
+class CreateChangeRequestSchema(BaseModel):
+    project_id: int = Field(..., description="Project ID")
+    title: str = Field(..., description="Change request title")
+    description: str = Field(default="", description="Description of the change")
+    justification: str = Field(default="", description="Why this change is needed")
+    impact_scope: str = Field(default="", description="Impact: budget/schedule/scope/quality")
+    submitted_by_id: int = Field(default=0, description="Optional submitter member ID")
+
+
+class ListChangeRequestsSchema(BaseModel):
+    project_id: int = Field(..., description="Project ID")
+    status: str = Field(default="", description="Optional status filter")
+
+
+class UpdateChangeRequestStatusSchema(BaseModel):
+    cr_id: int = Field(..., description="Change request ID")
+    status: str = Field(..., description="New status")
+    approved_by_id: int = Field(default=0, description="Optional approver member ID")
+
+
 class CreateChangeRequestTool(BaseTool):
     name: str = "create_change_request"
-    description: str = (
-        "Create a formal change request for a project. "
-        "Args: project_id, title, description (opt), justification (opt), "
-        "impact_scope (opt: budget/schedule/scope), submitted_by_id (opt). "
-        "Returns: change request ID and confirmation."
-    )
+    description: str = "Create a formal change request for a project."
+    args_schema: type = CreateChangeRequestSchema
 
     def _run(
         self,
@@ -413,11 +444,8 @@ class CreateChangeRequestTool(BaseTool):
 
 class ListChangeRequestsTool(BaseTool):
     name: str = "list_change_requests"
-    description: str = (
-        "List change requests for a project. "
-        "Args: project_id, status (opt: submitted/under_review/approved/rejected/implemented). "
-        "Returns: CR summary with title, status, impact, submitter."
-    )
+    description: str = "List change requests for a project."
+    args_schema: type = ListChangeRequestsSchema
 
     def _run(self, project_id: int = 0, status: str = "") -> str:
         if not project_id:
@@ -443,11 +471,8 @@ class ListChangeRequestsTool(BaseTool):
 
 class UpdateChangeRequestStatusTool(BaseTool):
     name: str = "update_change_request_status"
-    description: str = (
-        "Update a change request status (approve/reject/etc). "
-        "Args: cr_id, status (submitted/under_review/approved/rejected/implemented), "
-        "approved_by_id (opt)."
-    )
+    description: str = "Update a change request status (approve/reject/etc)."
+    args_schema: type = UpdateChangeRequestStatusSchema
 
     def _run(self, cr_id: int = 0, status: str = "", approved_by_id: int = 0) -> str:
         if not cr_id or not status:

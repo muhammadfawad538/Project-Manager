@@ -92,13 +92,7 @@ manager_agent.tools = [
     CheckTeamWorkloadTool(),
     UpdateTaskStatusTool(),
     LogDailyTool(),
-    CreateIssueTool(),
-    ListIssuesTool(),
-    UpdateIssueStatusTool(),
-    AssignIssueTool(),
-    CreateChangeRequestTool(),
-    ListChangeRequestsTool(),
-    UpdateChangeRequestStatusTool(),
+    # Issue/CR tools available via API; CrewAI integration pending schema fix
 ]
 
 

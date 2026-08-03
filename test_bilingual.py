@@ -16,29 +16,30 @@ sys.path.insert(0, "src")
 from pmagent.main import kickoff
 
 BASE_INPUTS = {
-    "project_type": "Enterprise CRM System Implementation",
-    "project_objectives": "Implement a customer relationship management (CRM) system for 500+ users across 3 departments within 6 months",
-    "industry": "Technology / Software",
-    "deadline": "6 months",
+    "project_type": "Residential Villa Construction – 20-Marla Plot",
+    "project_objectives": "Complete construction of a 2-story villa on a 20-marla plot within 3 months, including foundation, structure, MEP, and finishing",
+    "industry": "Construction",
+    "deadline": "3 months",
+    "country": "Saudi Arabia",
+    "currency": "SAR",
     "team_members": """
-- Sara (Project Manager)
-- Khalid (Backend Developer)
-- Noura (Frontend Developer)
-- Faisal (QA Engineer)
-- Laila (DevOps Engineer)
-- Omar (Business Analyst)
+- Ali (Site Engineer)
+- Ahmed (Carpenter / Steel Worker)
+- Usman (Electrician)
+- Hassan (Plumber)
+- Bilal (General Laborer)
 """,
     "project_requirements": """
-- Requirements gathering and stakeholder interviews
-- Backend API development (RESTful services)
-- Frontend UI development (React-based dashboard)
-- Database design and migration
-- User authentication and role-based access control
-- Integration with existing ERP and email systems
-- Automated testing and CI/CD pipeline setup
-- User training and documentation
-- Phased rollout to 3 departments
-- Post-launch support and bug fixing
+- Excavation and foundation work
+- Column and beam reinforcement and casting
+- Brick masonry and wall construction
+- Roof slab casting
+- Electrical wiring and conduit installation
+- Plumbing pipework and drainage
+- Window and door frame installation
+- Interior and exterior plastering
+- Flooring (marble/tiles)
+- Paint and finishing
 """,
 }
 
@@ -100,10 +101,12 @@ if __name__ == "__main__":
 
     # Run Arabic
     ar_inputs = BASE_INPUTS.copy()
-    ar_inputs["project_type"] = "تنفيذ نظام إدارة علاقات العملاء (CRM)"
-    ar_inputs["project_objectives"] = "تنفيذ نظام إدارة علاقات العملاء لـ 500+ مستخدم عبر 3 أقسام خلال 6 أشهر"
-    ar_inputs["industry"] = "التكنولوجيا / البرمجيات"
-    ar_inputs["deadline"] = "6 أشهر"
+    ar_inputs["project_type"] = "بناء فيلا سكنية - قطعة 20 مارلا"
+    ar_inputs["project_objectives"] = "إكمال بناء فيلا من طابقين على قطعة 20 مارلا خلال 3 أشهر"
+    ar_inputs["industry"] = "الإنشاءات"
+    ar_inputs["deadline"] = "3 أشهر"
+    ar_inputs["country"] = "المملكة العربية السعودية"
+    ar_inputs["currency"] = "SAR"
     ar_inputs["team_members"] = """
 - سارة (مديرة المشروع)
 - خالد (مطور خلفي)
