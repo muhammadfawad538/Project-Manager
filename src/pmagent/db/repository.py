@@ -18,12 +18,17 @@ from pmagent.db.models import (
     TaskStatus,
     MilestoneStatus,
     Priority,
+    IssueStatus,
+    IssuePriority,
+    ChangeRequestStatus,
     Project,
     Task,
     TeamMember,
     Milestone,
     DailyLog,
     SprintReport,
+    Issue,
+    ChangeRequest,
 )
 from pmagent.db.session import get_session
 
@@ -293,3 +298,120 @@ def save_sprint_report(
 
 def get_sprint_reports(session, project_id: int):
     return session.query(SprintReport).filter(SprintReport.project_id == project_id).order_by(SprintReport.created_at.desc()).all()
+
+
+# ── Issues ────────────────────────────────────────────────────────────────────
+
+
+def create_issue(
+    session,
+    *,
+    project_id: int,
+    title: str,
+    description: str = "",
+    priority: str = "medium",
+    task_id: int | None = None,
+    reported_by_id: int | None = None,
+) -> Issue:
+    issue = Issue(
+        project_id=project_id,
+        title=title,
+        description=description,
+        priority=IssuePriority(priority),
+        task_id=task_id,
+        reported_by_id=reported_by_id,
+    )
+    session.add(issue)
+    session.flush()
+    return issue
+
+
+def get_project_issues(session, project_id: int, status: IssueStatus | None = None):
+    query = session.query(Issue).filter(Issue.project_id == project_id)
+    if status:
+        query = query.filter(Issue.status == status)
+    return query.order_by(
+        Issue.priority.desc(), Issue.created_at.desc()
+    ).all()
+
+
+def get_issue(session, issue_id: int) -> Issue | None:
+    return session.query(Issue).filter(Issue.id == issue_id).first()
+
+
+def update_issue_status(
+    session, issue_id: int, status: IssueStatus, resolution_notes: str = ""
+) -> Issue | None:
+    issue = get_issue(session, issue_id)
+    if issue:
+        issue.status = status
+        if resolution_notes:
+            issue.resolution_notes = resolution_notes
+        if status in (IssueStatus.resolved, IssueStatus.closed) and not issue.resolved_at:
+            from datetime import datetime as dt
+            issue.resolved_at = dt.utcnow()
+        session.flush()
+    return issue
+
+
+def assign_issue(session, issue_id: int, member_id: int) -> Issue | None:
+    issue = get_issue(session, issue_id)
+    if issue:
+        issue.assigned_to_id = member_id
+        session.flush()
+    return issue
+
+
+# ── Change Requests ───────────────────────────────────────────────────────────
+
+
+def create_change_request(
+    session,
+    *,
+    project_id: int,
+    title: str,
+    description: str = "",
+    justification: str = "",
+    impact_scope: str = "",
+    submitted_by_id: int | None = None,
+) -> ChangeRequest:
+    cr = ChangeRequest(
+        project_id=project_id,
+        title=title,
+        description=description,
+        justification=justification,
+        impact_scope=impact_scope,
+        submitted_by_id=submitted_by_id,
+    )
+    session.add(cr)
+    session.flush()
+    return cr
+
+
+def get_project_change_requests(session, project_id: int, status: ChangeRequestStatus | None = None):
+    query = session.query(ChangeRequest).filter(ChangeRequest.project_id == project_id)
+    if status:
+        query = query.filter(ChangeRequest.status == status)
+    return query.order_by(ChangeRequest.created_at.desc()).all()
+
+
+def get_change_request(session, cr_id: int) -> ChangeRequest | None:
+    return session.query(ChangeRequest).filter(ChangeRequest.id == cr_id).first()
+
+
+def update_change_request_status(
+    session,
+    cr_id: int,
+    status: ChangeRequestStatus,
+    approved_by_id: int | None = None,
+) -> ChangeRequest | None:
+    cr = get_change_request(session, cr_id)
+    if cr:
+        cr.status = status
+        if approved_by_id:
+            cr.approved_by_id = approved_by_id
+        if status == ChangeRequestStatus.approved:
+            from datetime import datetime as dt
+            cr.decision_date = dt.utcnow()
+        session.flush()
+    return cr

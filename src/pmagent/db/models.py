@@ -4,7 +4,8 @@
 """
 SQLAlchemy ORM models for pmagent.
 
-Tables: projects, team_members, tasks, milestones, daily_logs, sprint_reports.
+Tables: projects, team_members, tasks, milestones, daily_logs, sprint_reports,
+        issues, change_requests.
 """
 
 from __future__ import annotations
@@ -93,6 +94,8 @@ class Project(Base):
     milestones: Mapped[list["Milestone"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     daily_logs: Mapped[list["DailyLog"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     sprint_reports: Mapped[list["SprintReport"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    issues: Mapped[list["Issue"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    change_requests: Mapped[list["ChangeRequest"]] = relationship(back_populates="project", cascade="all, delete-orphan")
 
     __table_args__ = (Index("ix_projects_status", "status"),)
 
@@ -194,3 +197,82 @@ class SprintReport(Base):
 
     # Relationships
     project: Mapped["Project"] = relationship(back_populates="sprint_reports")
+
+
+# ── Issue Log ─────────────────────────────────────────────────────────────────
+
+
+class IssueStatus(str, enum.Enum):
+    open = "open"
+    in_progress = "in_progress"
+    resolved = "resolved"
+    closed = "closed"
+
+
+class IssuePriority(str, enum.Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+    critical = "critical"
+
+
+class Issue(Base):
+    __tablename__ = "issues"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tasks.id"), nullable=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[IssueStatus] = mapped_column(
+        SAEnum(IssueStatus), default=IssueStatus.open, nullable=False
+    )
+    priority: Mapped[IssuePriority] = mapped_column(
+        SAEnum(IssuePriority), default=IssuePriority.medium, nullable=False
+    )
+    reported_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("team_members.id"), nullable=True)
+    assigned_to_id: Mapped[Optional[int]] = mapped_column(ForeignKey("team_members.id"), nullable=True)
+    resolution_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    # Relationships
+    project: Mapped["Project"] = relationship(back_populates="issues")
+    task: Mapped[Optional["Task"]] = relationship()
+    reported_by: Mapped[Optional["TeamMember"]] = relationship(foreign_keys=[reported_by_id])
+    assigned_to: Mapped[Optional["TeamMember"]] = relationship(foreign_keys=[assigned_to_id])
+
+
+# ── Change Requests ───────────────────────────────────────────────────────────
+
+
+class ChangeRequestStatus(str, enum.Enum):
+    submitted = "submitted"
+    under_review = "under_review"
+    approved = "approved"
+    rejected = "rejected"
+    implemented = "implemented"
+
+
+class ChangeRequest(Base):
+    __tablename__ = "change_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    justification: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[ChangeRequestStatus] = mapped_column(
+        SAEnum(ChangeRequestStatus), default=ChangeRequestStatus.submitted, nullable=False
+    )
+    impact_scope: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # budget, schedule, scope impact
+    submitted_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("team_members.id"), nullable=True)
+    approved_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("team_members.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    decision_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    implemented_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    # Relationships
+    project: Mapped["Project"] = relationship(back_populates="change_requests")
+    submitted_by: Mapped[Optional["TeamMember"]] = relationship(foreign_keys=[submitted_by_id])
+    approved_by: Mapped[Optional["TeamMember"]] = relationship(foreign_keys=[approved_by_id])

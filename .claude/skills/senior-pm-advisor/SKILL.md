@@ -119,6 +119,20 @@ Use `references/sprint-plan.md`. Include:
 ### Daily Standup Notes
 Summarize: yesterday, today, blockers. Keep it scannable.
 
+### Issue Log
+Use `references/issue-log.md` as the template. Every project has issues.
+Track: title, description, priority (critical/high/medium/low), status
+(open/in_progress/resolved/closed), assignee, reporter, SLA, and resolution notes.
+Always include an issue log alongside the project plan — risks are "what might happen,"
+issues are "what is happening right now."
+
+### Change Request Log
+Use `references/change-request-log.md` as the template. For every scope change,
+create a formal CR with: title, description, justification, impact scope
+(budget/schedule/scope/quality), status (submitted/under_review/approved/rejected/implemented),
+submitter, approver, and dates. In GCC government projects, this is mandatory for
+compliance — no verbal changes.
+
 ### Resource Allocation
 Map tasks to team members by skill match, availability, and current load.
 Flag over-allocations with recommended rebalancing. Account for

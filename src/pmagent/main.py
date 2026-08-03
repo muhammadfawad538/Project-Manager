@@ -72,6 +72,13 @@ from pmagent.tools.pm_tools import (  # noqa: E402
     CheckTeamWorkloadTool,
     UpdateTaskStatusTool,
     LogDailyTool,
+    CreateIssueTool,
+    ListIssuesTool,
+    UpdateIssueStatusTool,
+    AssignIssueTool,
+    CreateChangeRequestTool,
+    ListChangeRequestsTool,
+    UpdateChangeRequestStatusTool,
 )
 
 
@@ -85,6 +92,13 @@ manager_agent.tools = [
     CheckTeamWorkloadTool(),
     UpdateTaskStatusTool(),
     LogDailyTool(),
+    CreateIssueTool(),
+    ListIssuesTool(),
+    UpdateIssueStatusTool(),
+    AssignIssueTool(),
+    CreateChangeRequestTool(),
+    ListChangeRequestsTool(),
+    UpdateChangeRequestStatusTool(),
 ]
 
 

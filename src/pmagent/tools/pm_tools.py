@@ -16,7 +16,7 @@ from typing import Any
 
 from crewai.tools import BaseTool
 
-from pmagent.db.models import ProjectStatus, TaskStatus
+from pmagent.db.models import ProjectStatus, TaskStatus, IssueStatus, IssuePriority, ChangeRequestStatus
 from pmagent.db.repository import (
     create_project,
     add_team_member,
@@ -269,3 +269,197 @@ class CreateProjectTool(BaseTool):
                     add_team_member(s, project_id=project.id, name=n, role=r)
                     added += 1
         return f"Project '{name}' created with id={pid}. {added} team member(s) added."
+
+
+# ── Issue Log Tools ────────────────────────────────────────────────────────────
+
+
+class CreateIssueTool(BaseTool):
+    name: str = "create_issue"
+    description: str = (
+        "Log a new issue in the project. "
+        "Args: project_id, title, description (opt), priority (low/medium/high/critical), "
+        "task_id (opt), reported_by_id (opt). "
+        "Returns: issue ID and confirmation."
+    )
+
+    def _run(
+        self,
+        project_id: int = 0,
+        title: str = "",
+        description: str = "",
+        priority: str = "medium",
+        task_id: int = 0,
+        reported_by_id: int = 0,
+    ) -> str:
+        if not project_id or not title:
+            return "Error: project_id and title are required."
+        with get_session() as s:
+            issue = create_issue(
+                s,
+                project_id=project_id,
+                title=title,
+                description=description,
+                priority=priority,
+                task_id=task_id or None,
+                reported_by_id=reported_by_id or None,
+            )
+        return f"Issue #{issue.id} logged: '{title}' (priority: {priority})"
+
+
+class ListIssuesTool(BaseTool):
+    name: str = "list_issues"
+    description: str = (
+        "List issues for a project. "
+        "Args: project_id, status (opt: open/in_progress/resolved/closed). "
+        "Returns: issue summary with title, status, priority, assignee."
+    )
+
+    def _run(self, project_id: int = 0, status: str = "") -> str:
+        if not project_id:
+            return "Error: project_id is required."
+        st = None
+        if status:
+            try:
+                st = IssueStatus(status.lower())
+            except ValueError:
+                return f"Invalid status '{status}'. Use: open, in_progress, resolved, closed"
+        with get_session() as s:
+            issues = get_project_issues(s, project_id, status=st)
+        if not issues:
+            return f"No issues found for project {project_id}."
+        lines = [f"Issues in project {project_id}:"]
+        for i in issues:
+            assignee = i.assigned_to.name if i.assigned_to else "Unassigned"
+            lines.append(
+                f"  [{i.id}] {i.title} — {i.status.value} | {i.priority.value} | {assignee}"
+            )
+        return "\n".join(lines)
+
+
+class UpdateIssueStatusTool(BaseTool):
+    name: str = "update_issue_status"
+    description: str = (
+        "Update an issue's status. "
+        "Args: issue_id, status (open/in_progress/resolved/closed), resolution_notes (opt)."
+    )
+
+    def _run(self, issue_id: int = 0, status: str = "", resolution_notes: str = "") -> str:
+        if not issue_id or not status:
+            return "Error: issue_id and status are required."
+        try:
+            st = IssueStatus(status.lower())
+        except ValueError:
+            return f"Invalid status '{status}'. Use: open, in_progress, resolved, closed"
+        with get_session() as s:
+            issue = update_issue_status(s, issue_id, st, resolution_notes=resolution_notes)
+        if not issue:
+            return f"Issue #{issue_id} not found."
+        return f"Issue #{issue_id} marked as '{st.value}'."
+
+
+class AssignIssueTool(BaseTool):
+    name: str = "assign_issue"
+    description: str = (
+        "Assign an issue to a team member. "
+        "Args: issue_id, member_id."
+    )
+
+    def _run(self, issue_id: int = 0, member_id: int = 0) -> str:
+        if not issue_id or not member_id:
+            return "Error: issue_id and member_id are required."
+        with get_session() as s:
+            issue = assign_issue(s, issue_id, member_id)
+        if not issue:
+            return f"Issue #{issue_id} not found."
+        return f"Issue #{issue_id} assigned to team member #{member_id}."
+
+
+# ── Change Request Tools ──────────────────────────────────────────────────────
+
+
+class CreateChangeRequestTool(BaseTool):
+    name: str = "create_change_request"
+    description: str = (
+        "Create a formal change request for a project. "
+        "Args: project_id, title, description (opt), justification (opt), "
+        "impact_scope (opt: budget/schedule/scope), submitted_by_id (opt). "
+        "Returns: change request ID and confirmation."
+    )
+
+    def _run(
+        self,
+        project_id: int = 0,
+        title: str = "",
+        description: str = "",
+        justification: str = "",
+        impact_scope: str = "",
+        submitted_by_id: int = 0,
+    ) -> str:
+        if not project_id or not title:
+            return "Error: project_id and title are required."
+        with get_session() as s:
+            cr = create_change_request(
+                s,
+                project_id=project_id,
+                title=title,
+                description=description,
+                justification=justification,
+                impact_scope=impact_scope,
+                submitted_by_id=submitted_by_id or None,
+            )
+        return f"Change Request #{cr.id} submitted: '{title}' (status: {cr.status.value})"
+
+
+class ListChangeRequestsTool(BaseTool):
+    name: str = "list_change_requests"
+    description: str = (
+        "List change requests for a project. "
+        "Args: project_id, status (opt: submitted/under_review/approved/rejected/implemented). "
+        "Returns: CR summary with title, status, impact, submitter."
+    )
+
+    def _run(self, project_id: int = 0, status: str = "") -> str:
+        if not project_id:
+            return "Error: project_id is required."
+        st = None
+        if status:
+            try:
+                st = ChangeRequestStatus(status.lower())
+            except ValueError:
+                return f"Invalid status '{status}'. Use: submitted, under_review, approved, rejected, implemented"
+        with get_session() as s:
+            crs = get_project_change_requests(s, project_id, status=st)
+        if not crs:
+            return f"No change requests found for project {project_id}."
+        lines = [f"Change Requests in project {project_id}:"]
+        for cr in crs:
+            submitter = cr.submitted_by.name if cr.submitted_by else "Unknown"
+            lines.append(
+                f"  [{cr.id}] {cr.title} — {cr.status.value} | Impact: {cr.impact_scope or 'Not specified'} | By: {submitter}"
+            )
+        return "\n".join(lines)
+
+
+class UpdateChangeRequestStatusTool(BaseTool):
+    name: str = "update_change_request_status"
+    description: str = (
+        "Update a change request status (approve/reject/etc). "
+        "Args: cr_id, status (submitted/under_review/approved/rejected/implemented), "
+        "approved_by_id (opt)."
+    )
+
+    def _run(self, cr_id: int = 0, status: str = "", approved_by_id: int = 0) -> str:
+        if not cr_id or not status:
+            return "Error: cr_id and status are required."
+        try:
+            st = ChangeRequestStatus(status.lower())
+        except ValueError:
+            return f"Invalid status '{status}'. Use: submitted, under_review, approved, rejected, implemented"
+        with get_session() as s:
+            cr = update_change_request_status(
+                s, cr_id, st, approved_by_id=approved_by_id or None
+            )
+        if not cr:
+            return f"Change Request #{cr_id} not found."
+        return f"Change Request #{cr_id} updated to '{st.value}'."

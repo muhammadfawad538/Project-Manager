@@ -35,7 +35,7 @@ load_dotenv(_ENV_PATH)
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 
 # ── 0. Env check ──────────────────────────────────────────────────────────────
 
@@ -287,3 +287,219 @@ async def export_plan(project_id: int, request: ExportRequest) -> dict:
             status_code=500,
             detail=f"Export failed: {exc}",
         ) from exc
+
+
+# ── 6. Issue Log endpoints ─────────────────────────────────────────────────────
+
+
+class IssueCreateRequest(BaseModel):
+    title: str
+    description: str = ""
+    priority: str = "medium"
+    task_id: Optional[int] = None
+    reported_by_id: Optional[int] = None
+
+
+class IssueUpdateStatusRequest(BaseModel):
+    status: str
+    resolution_notes: str = ""
+
+
+class IssueAssignRequest(BaseModel):
+    member_id: int
+
+
+@app.get("/projects/{project_id}/issues")
+async def list_issues(project_id: int, status: Optional[str] = None) -> dict:
+    """List all issues for a project."""
+    from pmagent.db.repository import get_project_issues
+    from pmagent.db.models import IssueStatus
+
+    st = None
+    if status:
+        try:
+            st = IssueStatus(status.lower())
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid status '{status}'")
+
+    with get_session() as s:
+        issues = get_project_issues(s, project_id, status=st)
+
+    return {
+        "project_id": project_id,
+        "count": len(issues),
+        "issues": [
+            {
+                "id": i.id,
+                "title": i.title,
+                "description": i.description,
+                "priority": i.priority.value,
+                "status": i.status.value,
+                "task_id": i.task_id,
+                "reported_by": i.reported_by.name if i.reported_by else None,
+                "assigned_to": i.assigned_to.name if i.assigned_to else None,
+                "resolution_notes": i.resolution_notes,
+                "created_at": i.created_at.isoformat(),
+                "resolved_at": i.resolved_at.isoformat() if i.resolved_at else None,
+            }
+            for i in issues
+        ],
+    }
+
+
+@app.post("/projects/{project_id}/issues")
+async def create_issue(project_id: int, request: IssueCreateRequest) -> dict:
+    """Create a new issue."""
+    from pmagent.db.repository import create_issue
+
+    with get_session() as s:
+        issue = create_issue(
+            s,
+            project_id=project_id,
+            title=request.title,
+            description=request.description,
+            priority=request.priority,
+            task_id=request.task_id,
+            reported_by_id=request.reported_by_id,
+        )
+    return {
+        "id": issue.id,
+        "project_id": issue.project_id,
+        "title": issue.title,
+        "priority": issue.priority.value,
+        "status": issue.status.value,
+        "message": f"Issue #{issue.id} logged.",
+    }
+
+
+@app.put("/issues/{issue_id}/status")
+async def update_issue_status(issue_id: int, request: IssueUpdateStatusRequest) -> dict:
+    """Update an issue's status."""
+    from pmagent.db.repository import update_issue_status
+    from pmagent.db.models import IssueStatus
+
+    try:
+        st = IssueStatus(request.status.lower())
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid status '{request.status}'")
+
+    with get_session() as s:
+        issue = update_issue_status(s, issue_id, st, resolution_notes=request.resolution_notes)
+
+    if not issue:
+        raise HTTPException(status_code=404, detail=f"Issue #{issue_id} not found")
+
+    return {"id": issue.id, "status": issue.status.value, "message": f"Issue #{issue_id} updated."}
+
+
+@app.put("/issues/{issue_id}/assign")
+async def assign_issue(issue_id: int, request: IssueAssignRequest) -> dict:
+    """Assign an issue to a team member."""
+    from pmagent.db.repository import assign_issue
+
+    with get_session() as s:
+        issue = assign_issue(s, issue_id, request.member_id)
+
+    if not issue:
+        raise HTTPException(status_code=404, detail=f"Issue #{issue_id} not found")
+
+    return {"id": issue.id, "assigned_to_id": issue.assigned_to_id, "message": f"Issue #{issue_id} assigned."}
+
+
+# ── 7. Change Request endpoints ───────────────────────────────────────────────
+
+
+class ChangeRequestCreateRequest(BaseModel):
+    title: str
+    description: str = ""
+    justification: str = ""
+    impact_scope: str = ""
+    submitted_by_id: Optional[int] = None
+
+
+class ChangeRequestUpdateStatusRequest(BaseModel):
+    status: str
+    approved_by_id: Optional[int] = None
+
+
+@app.get("/projects/{project_id}/change-requests")
+async def list_change_requests(project_id: int, status: Optional[str] = None) -> dict:
+    """List all change requests for a project."""
+    from pmagent.db.repository import get_project_change_requests
+    from pmagent.db.models import ChangeRequestStatus
+
+    st = None
+    if status:
+        try:
+            st = ChangeRequestStatus(status.lower())
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid status '{status}'")
+
+    with get_session() as s:
+        crs = get_project_change_requests(s, project_id, status=st)
+
+    return {
+        "project_id": project_id,
+        "count": len(crs),
+        "change_requests": [
+            {
+                "id": cr.id,
+                "title": cr.title,
+                "description": cr.description,
+                "justification": cr.justification,
+                "impact_scope": cr.impact_scope,
+                "status": cr.status.value,
+                "submitted_by": cr.submitted_by.name if cr.submitted_by else None,
+                "approved_by": cr.approved_by.name if cr.approved_by else None,
+                "created_at": cr.created_at.isoformat(),
+                "decision_date": cr.decision_date.isoformat() if cr.decision_date else None,
+                "implemented_at": cr.implemented_at.isoformat() if cr.implemented_at else None,
+            }
+            for cr in crs
+        ],
+    }
+
+
+@app.post("/projects/{project_id}/change-requests")
+async def create_change_request(project_id: int, request: ChangeRequestCreateRequest) -> dict:
+    """Create a new change request."""
+    from pmagent.db.repository import create_change_request
+
+    with get_session() as s:
+        cr = create_change_request(
+            s,
+            project_id=project_id,
+            title=request.title,
+            description=request.description,
+            justification=request.justification,
+            impact_scope=request.impact_scope,
+            submitted_by_id=request.submitted_by_id,
+        )
+
+    return {
+        "id": cr.id,
+        "project_id": cr.project_id,
+        "title": cr.title,
+        "status": cr.status.value,
+        "message": f"Change Request #{cr.id} submitted.",
+    }
+
+
+@app.put("/change-requests/{cr_id}/status")
+async def update_change_request_status(cr_id: int, request: ChangeRequestUpdateStatusRequest) -> dict:
+    """Update a change request status (approve/reject/etc)."""
+    from pmagent.db.repository import update_change_request_status
+    from pmagent.db.models import ChangeRequestStatus
+
+    try:
+        st = ChangeRequestStatus(request.status.lower())
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid status '{request.status}'")
+
+    with get_session() as s:
+        cr = update_change_request_status(s, cr_id, st, approved_by_id=request.approved_by_id)
+
+    if not cr:
+        raise HTTPException(status_code=404, detail=f"Change Request #{cr_id} not found")
+
+    return {"id": cr.id, "status": cr.status.value, "message": f"Change Request #{cr_id} updated."}

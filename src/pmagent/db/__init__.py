@@ -1,5 +1,10 @@
 # pmagent.db — SQLAlchemy ORM, session, and repository
-from pmagent.db.models import Base, ProjectStatus, TaskStatus, MilestoneStatus, Priority
+from pmagent.db.models import (
+    Base, ProjectStatus, TaskStatus, MilestoneStatus, Priority,
+    IssueStatus, IssuePriority, ChangeRequestStatus,
+    Project, Task, TeamMember, Milestone, DailyLog, SprintReport,
+    Issue, ChangeRequest,
+)
 from pmagent.db.session import get_session, create_db, SessionLocal
 from pmagent.db.repository import (
     create_project,
@@ -23,6 +28,15 @@ from pmagent.db.repository import (
     get_project_daily_logs,
     save_sprint_report,
     get_sprint_reports,
+    create_issue,
+    get_project_issues,
+    get_issue,
+    update_issue_status,
+    assign_issue,
+    create_change_request,
+    get_project_change_requests,
+    get_change_request,
+    update_change_request_status,
 )
 
 __all__ = [
