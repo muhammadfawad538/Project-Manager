@@ -150,6 +150,8 @@ async def generate_plan(request: ProjectRequest) -> dict:
         "project_objectives": request.project_objectives,
         "industry": request.industry,
         "deadline": request.deadline,
+        "country": request.country,
+        "currency": request.currency,
         "output_language": request.output_language,
         "team_members": request.team_members,
         "project_requirements": request.project_requirements,
