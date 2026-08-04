@@ -413,5 +413,26 @@ def update_change_request_status(
         if status == ChangeRequestStatus.approved:
             from datetime import datetime as dt
             cr.decision_date = dt.utcnow()
+        if status == ChangeRequestStatus.implemented:
+            from datetime import datetime as dt
+            cr.implemented_at = dt.utcnow()
         session.flush()
     return cr
+
+
+def delete_issue(session, issue_id: int) -> bool:
+    issue = get_issue(session, issue_id)
+    if issue:
+        session.delete(issue)
+        session.flush()
+        return True
+    return False
+
+
+def delete_change_request(session, cr_id: int) -> bool:
+    cr = get_change_request(session, cr_id)
+    if cr:
+        session.delete(cr)
+        session.flush()
+        return True
+    return False

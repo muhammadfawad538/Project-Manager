@@ -14,7 +14,6 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from pydantic import BaseModel, Field
 from crewai.tools import BaseTool
 
 from pmagent.db.models import ProjectStatus, TaskStatus, IssueStatus, IssuePriority, ChangeRequestStatus
@@ -275,45 +274,23 @@ class CreateProjectTool(BaseTool):
 # ── Issue Log Tools ────────────────────────────────────────────────────────────
 
 
-class CreateIssueSchema(BaseModel):
-    project_id: int = Field(..., description="Project ID")
-    title: str = Field(..., description="Issue title")
-    description: str = Field(default="", description="Issue description")
-    priority: str = Field(default="medium", description="Priority: low/medium/high/critical")
-    task_id: int = Field(default=0, description="Optional task ID")
-    reported_by_id: int = Field(default=0, description="Optional reporter member ID")
-
-
-class ListIssuesSchema(BaseModel):
-    project_id: int = Field(..., description="Project ID")
-    status: str = Field(default="", description="Optional status filter")
-
-
-class UpdateIssueStatusSchema(BaseModel):
-    issue_id: int = Field(..., description="Issue ID")
-    status: str = Field(..., description="New status: open/in_progress/resolved/closed")
-    resolution_notes: str = Field(default="", description="Optional resolution notes")
-
-
-class AssignIssueSchema(BaseModel):
-    issue_id: int = Field(..., description="Issue ID")
-    member_id: int = Field(..., description="Team member ID to assign to")
-
-
 class CreateIssueTool(BaseTool):
     name: str = "create_issue"
-    description: str = "Log a new issue in the project."
-    args_schema: type = CreateIssueSchema
+    description: str = (
+        "Log a new issue in the project. "
+        "Args: project_id (int, required), title (str, required), "
+        "description (str, opt), priority (low/medium/high/critical), "
+        "task_id (int, opt), reported_by_id (int, opt). "
+        "Returns: issue ID and confirmation."
+    )
 
-    def _run(
-        self,
-        project_id: int = 0,
-        title: str = "",
-        description: str = "",
-        priority: str = "medium",
-        task_id: int = 0,
-        reported_by_id: int = 0,
-    ) -> str:
+    def _run(self, **kwargs) -> str:
+        project_id = int(kwargs.get("project_id", 0))
+        title = kwargs.get("title", "")
+        description = kwargs.get("description", "")
+        priority = kwargs.get("priority", "medium")
+        task_id = kwargs.get("task_id", 0)
+        reported_by_id = kwargs.get("reported_by_id", 0)
         if not project_id or not title:
             return "Error: project_id and title are required."
         with get_session() as s:
@@ -331,10 +308,15 @@ class CreateIssueTool(BaseTool):
 
 class ListIssuesTool(BaseTool):
     name: str = "list_issues"
-    description: str = "List issues for a project."
-    args_schema: type = ListIssuesSchema
+    description: str = (
+        "List issues for a project. "
+        "Args: project_id (int, required), status (str, opt: open/in_progress/resolved/closed). "
+        "Returns: issue summary with title, status, priority, assignee."
+    )
 
-    def _run(self, project_id: int = 0, status: str = "") -> str:
+    def _run(self, **kwargs) -> str:
+        project_id = int(kwargs.get("project_id", 0))
+        status = kwargs.get("status", "")
         if not project_id:
             return "Error: project_id is required."
         st = None
@@ -358,10 +340,16 @@ class ListIssuesTool(BaseTool):
 
 class UpdateIssueStatusTool(BaseTool):
     name: str = "update_issue_status"
-    description: str = "Update an issue's status."
-    args_schema: type = UpdateIssueStatusSchema
+    description: str = (
+        "Update an issue's status. "
+        "Args: issue_id (int, required), status (str, required: open/in_progress/resolved/closed), "
+        "resolution_notes (str, opt)."
+    )
 
-    def _run(self, issue_id: int = 0, status: str = "", resolution_notes: str = "") -> str:
+    def _run(self, **kwargs) -> str:
+        issue_id = int(kwargs.get("issue_id", 0))
+        status = kwargs.get("status", "")
+        resolution_notes = kwargs.get("resolution_notes", "")
         if not issue_id or not status:
             return "Error: issue_id and status are required."
         try:
@@ -377,10 +365,14 @@ class UpdateIssueStatusTool(BaseTool):
 
 class AssignIssueTool(BaseTool):
     name: str = "assign_issue"
-    description: str = "Assign an issue to a team member."
-    args_schema: type = AssignIssueSchema
+    description: str = (
+        "Assign an issue to a team member. "
+        "Args: issue_id (int, required), member_id (int, required)."
+    )
 
-    def _run(self, issue_id: int = 0, member_id: int = 0) -> str:
+    def _run(self, **kwargs) -> str:
+        issue_id = int(kwargs.get("issue_id", 0))
+        member_id = int(kwargs.get("member_id", 0))
         if not issue_id or not member_id:
             return "Error: issue_id and member_id are required."
         with get_session() as s:
@@ -393,40 +385,23 @@ class AssignIssueTool(BaseTool):
 # ── Change Request Tools ──────────────────────────────────────────────────────
 
 
-class CreateChangeRequestSchema(BaseModel):
-    project_id: int = Field(..., description="Project ID")
-    title: str = Field(..., description="Change request title")
-    description: str = Field(default="", description="Description of the change")
-    justification: str = Field(default="", description="Why this change is needed")
-    impact_scope: str = Field(default="", description="Impact: budget/schedule/scope/quality")
-    submitted_by_id: int = Field(default=0, description="Optional submitter member ID")
-
-
-class ListChangeRequestsSchema(BaseModel):
-    project_id: int = Field(..., description="Project ID")
-    status: str = Field(default="", description="Optional status filter")
-
-
-class UpdateChangeRequestStatusSchema(BaseModel):
-    cr_id: int = Field(..., description="Change request ID")
-    status: str = Field(..., description="New status")
-    approved_by_id: int = Field(default=0, description="Optional approver member ID")
-
-
 class CreateChangeRequestTool(BaseTool):
     name: str = "create_change_request"
-    description: str = "Create a formal change request for a project."
-    args_schema: type = CreateChangeRequestSchema
+    description: str = (
+        "Create a formal change request for a project. "
+        "Args: project_id (int, required), title (str, required), "
+        "description (str, opt), justification (str, opt), "
+        "impact_scope (str, opt: budget/schedule/scope/quality), "
+        "submitted_by_id (int, opt). Returns: change request ID and confirmation."
+    )
 
-    def _run(
-        self,
-        project_id: int = 0,
-        title: str = "",
-        description: str = "",
-        justification: str = "",
-        impact_scope: str = "",
-        submitted_by_id: int = 0,
-    ) -> str:
+    def _run(self, **kwargs) -> str:
+        project_id = int(kwargs.get("project_id", 0))
+        title = kwargs.get("title", "")
+        description = kwargs.get("description", "")
+        justification = kwargs.get("justification", "")
+        impact_scope = kwargs.get("impact_scope", "")
+        submitted_by_id = kwargs.get("submitted_by_id", 0)
         if not project_id or not title:
             return "Error: project_id and title are required."
         with get_session() as s:
@@ -444,10 +419,15 @@ class CreateChangeRequestTool(BaseTool):
 
 class ListChangeRequestsTool(BaseTool):
     name: str = "list_change_requests"
-    description: str = "List change requests for a project."
-    args_schema: type = ListChangeRequestsSchema
+    description: str = (
+        "List change requests for a project. "
+        "Args: project_id (int, required), status (str, opt: submitted/under_review/approved/rejected/implemented). "
+        "Returns: CR summary with title, status, impact, submitter."
+    )
 
-    def _run(self, project_id: int = 0, status: str = "") -> str:
+    def _run(self, **kwargs) -> str:
+        project_id = int(kwargs.get("project_id", 0))
+        status = kwargs.get("status", "")
         if not project_id:
             return "Error: project_id is required."
         st = None
@@ -471,10 +451,16 @@ class ListChangeRequestsTool(BaseTool):
 
 class UpdateChangeRequestStatusTool(BaseTool):
     name: str = "update_change_request_status"
-    description: str = "Update a change request status (approve/reject/etc)."
-    args_schema: type = UpdateChangeRequestStatusSchema
+    description: str = (
+        "Update a change request status (approve/reject/etc). "
+        "Args: cr_id (int, required), status (str, required: submitted/under_review/approved/rejected/implemented), "
+        "approved_by_id (int, opt)."
+    )
 
-    def _run(self, cr_id: int = 0, status: str = "", approved_by_id: int = 0) -> str:
+    def _run(self, **kwargs) -> str:
+        cr_id = int(kwargs.get("cr_id", 0))
+        status = kwargs.get("status", "")
+        approved_by_id = kwargs.get("approved_by_id", 0)
         if not cr_id or not status:
             return "Error: cr_id and status are required."
         try:
@@ -488,3 +474,92 @@ class UpdateChangeRequestStatusTool(BaseTool):
         if not cr:
             return f"Change Request #{cr_id} not found."
         return f"Change Request #{cr_id} updated to '{st.value}'."
+
+
+class DeleteIssueTool(BaseTool):
+    name: str = "delete_issue"
+    description: str = "Delete an issue from the project. Args: issue_id (int, required)."
+
+    def _run(self, **kwargs) -> str:
+        issue_id = int(kwargs.get("issue_id", 0))
+        if not issue_id:
+            return "Error: issue_id is required."
+        from pmagent.db.repository import delete_issue
+        with get_session() as s:
+            ok = delete_issue(s, issue_id)
+        return f"Issue #{issue_id} deleted." if ok else f"Issue #{issue_id} not found."
+
+
+class DeleteChangeRequestTool(BaseTool):
+    name: str = "delete_change_request"
+    description: str = "Delete a change request. Args: cr_id (int, required)."
+
+    def _run(self, **kwargs) -> str:
+        cr_id = int(kwargs.get("cr_id", 0))
+        if not cr_id:
+            return "Error: cr_id is required."
+        from pmagent.db.repository import delete_change_request
+        with get_session() as s:
+            ok = delete_change_request(s, cr_id)
+        return f"Change Request #{cr_id} deleted." if ok else f"Change Request #{cr_id} not found."
+
+
+class ArchiveProjectTool(BaseTool):
+    name: str = "archive_project"
+    description: str = "Archive a project. Args: project_id (int, required)."
+
+    def _run(self, **kwargs) -> str:
+        project_id = int(kwargs.get("project_id", 0))
+        if not project_id:
+            return "Error: project_id is required."
+        from pmagent.db.repository import update_project_status
+        from pmagent.db.models import ProjectStatus
+        with get_session() as s:
+            p = update_project_status(s, project_id, ProjectStatus.archived)
+        return f"Project #{project_id} archived." if p else f"Project #{project_id} not found."
+
+
+class ExportProjectTool(BaseTool):
+    name: str = "export_project"
+    description: str = (
+        "Export project plan as MS Project XML or CSV. "
+        "Args: project_id (int, required), format (str, opt: xml/csv/html)."
+    )
+
+    def _run(self, **kwargs) -> str:
+        project_id = int(kwargs.get("project_id", 0))
+        fmt = kwargs.get("format", "xml")
+        if not project_id:
+            return "Error: project_id is required."
+        from pmagent.db.repository import get_project_tasks, get_project
+        from pmagent.exports import export_msproject_xml, export_wbs_csv
+        from pathlib import Path
+        with get_session() as s:
+            tasks = get_project_tasks(s, project_id)
+            project = get_project(s, project_id)
+        if not tasks:
+            return f"No tasks found for project {project_id}."
+        task_dicts = []
+        for t in tasks:
+            deps = []
+            if t.dependencies:
+                deps = [d.strip() for d in t.dependencies.split(",") if d.strip()]
+            task_dicts.append({
+                "id": str(t.id), "name": t.name, "description": t.description or "",
+                "owner": t.assigned_to.name if t.assigned_to else "",
+                "estimated_hours": t.estimated_hours,
+                "due_date": t.due_date.strftime("%Y-%m-%d") if t.due_date else "",
+                "dependencies": deps, "priority": t.priority.value,
+            })
+        name = project.name if project else f"project_{project_id}"
+        if fmt == "csv":
+            content = export_wbs_csv(task_dicts)
+            ext = "csv"
+        else:
+            content = export_msproject_xml(task_dicts, name)
+            ext = "xml"
+        out_dir = Path("data/exports")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        fp = out_dir / f"{name.replace(' ', '_')}.{ext}"
+        fp.write_text(content, encoding="utf-8")
+        return f"Exported to {fp} ({len(task_dicts)} tasks)"

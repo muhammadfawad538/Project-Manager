@@ -39,7 +39,33 @@ from typing import Optional, List
 
 from pmagent.db.session import get_session
 
-# ── 0. Env check ──────────────────────────────────────────────────────────────
+# ── 0. Fix CrewAI SQLite WAL issue on Windows ─────────────────────────────────
+try:
+    import sqlite3
+    from crewai.memory.storage.kickoff_task_outputs_storage import KickoffTaskOutputsSQLiteStorage
+
+    _orig_init = KickoffTaskOutputsSQLiteStorage._initialize_db
+
+    def _patched_init(self):
+        try:
+            with sqlite3.connect(self.db_path, timeout=30) as conn:
+                conn.execute("PRAGMA journal_mode=DELETE")
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS latest_kickoff_task_outputs (
+                        task_id TEXT PRIMARY KEY, expected_output TEXT, output JSON,
+                        task_index INTEGER, inputs JSON, was_replayed BOOLEAN,
+                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                conn.commit()
+        except sqlite3.Error:
+            pass
+
+    KickoffTaskOutputsSQLiteStorage._initialize_db = _patched_init
+except Exception:
+    pass
+
+# ── 1. Env check ──────────────────────────────────────────────────────────────
 
 api_key = os.environ.get("OPENAI_API_KEY", "")
 if not api_key or api_key == "your_openai_key_here":
@@ -159,8 +185,9 @@ async def generate_plan(request: ProjectRequest) -> dict:
 
     try:
         from pmagent.main import kickoff
+        import asyncio
 
-        result = kickoff(inputs=inputs)
+        result = await asyncio.to_thread(kickoff, inputs=inputs)
         return result
 
     except Exception as exc:
