@@ -39,17 +39,21 @@ from typing import Optional, List
 
 from pmagent.db.session import get_session
 
-# ── 0. Fix CrewAI SQLite WAL issue on Windows ─────────────────────────────────
+# ── 0. Fix CrewAI SQLite disk I/O error on Windows ────────────────────────────
 try:
     import sqlite3
-    from crewai.memory.storage.kickoff_task_outputs_storage import KickoffTaskOutputsSQLiteStorage
+    import crewai.memory.storage.kickoff_task_outputs_storage as _crewai_storage_mod
 
-    _orig_init = KickoffTaskOutputsSQLiteStorage._initialize_db
+    # Patch _initialize_db to use DELETE journal mode instead of WAL
+    _orig_init_db = _crewai_storage_mod.KickoffTaskOutputsSQLiteStorage._initialize_db
 
-    def _patched_init(self):
+    def _patched_init_db(self):
         try:
             with sqlite3.connect(self.db_path, timeout=30) as conn:
-                conn.execute("PRAGMA journal_mode=DELETE")
+                try:
+                    conn.execute("PRAGMA journal_mode=DELETE")
+                except sqlite3.Error:
+                    pass
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS latest_kickoff_task_outputs (
                         task_id TEXT PRIMARY KEY, expected_output TEXT, output JSON,
@@ -61,7 +65,7 @@ try:
         except sqlite3.Error:
             pass
 
-    KickoffTaskOutputsSQLiteStorage._initialize_db = _patched_init
+    _crewai_storage_mod.KickoffTaskOutputsSQLiteStorage._initialize_db = _patched_init_db
 except Exception:
     pass
 
