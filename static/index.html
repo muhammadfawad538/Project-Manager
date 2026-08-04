@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pmagent — Project Dashboard</title>
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+  <!-- Sidebar: Project List -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h1>pmagent</h1>
+      <small>AI Project Management</small>
+    </div>
+    <div class="project-list">
+      <div class="project-list-header">Projects</div>
+      <div id="projectList">Loading...</div>
+    </div>
+    <div class="sidebar-footer">pmagent v0.1 · GCC Markets</div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main">
+    <!-- Top Bar -->
+    <div class="topbar">
+      <div class="topbar-left">
+        <h2 id="projectTitle">Select a project</h2>
+        <div class="project-type" id="projectType"></div>
+      </div>
+      <div class="topbar-right">
+        <svg class="progress-ring" viewBox="0 0 48 48" id="progressRing" title="Project progress">
+          <circle class="bg" cx="24" cy="24" r="20"/>
+          <circle class="fg" cx="24" cy="24" r="20" stroke="var(--primary)" stroke-dasharray="125.6" stroke-dashoffset="125.6" transform="rotate(-90 24 24)"/>
+          <text x="24" y="28" text-anchor="middle" font-size="10" fill="var(--primary)" font-weight="700" id="progressText">0%</text>
+        </svg>
+        <button class="lang-toggle" id="langBtn" onclick="toggleLang()">عربي</button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" data-tab="overview">Overview</button>
+      <button class="tab" data-tab="tasks">Tasks</button>
+      <button class="tab" data-tab="milestones">Milestones</button>
+      <button class="tab" data-tab="issues">Issues</button>
+      <button class="tab" data-tab="crs">Change Requests</button>
+      <button class="tab" data-tab="blockers">Blockers</button>
+      <button class="tab" data-tab="logs">Daily Logs</button>
+      <button class="tab" data-tab="team">Team</button>
+    </div>
+
+    <!-- Content Area -->
+    <div class="content">
+
+      <!-- Overview -->
+      <div id="panel-overview" class="tab-panel active">
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-label">Progress</div>
+            <div class="stat-value" id="statTasks">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Open Issues</div>
+            <div class="stat-value" id="statIssues">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Blockers</div>
+            <div class="stat-value" id="statBlockers">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Change Requests</div>
+            <div class="stat-value" id="statCRs">—</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Project Details</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div><strong>Status:</strong> <span id="overviewStatus">—</span></div>
+            <div><strong>Created:</strong> <span id="overviewCreated">—</span></div>
+            <div style="grid-column: 1/-1;"><strong>Objectives:</strong> <span id="overviewObjectives">—</span></div>
+            <div style="grid-column: 1/-1;"><strong>Requirements:</strong> <span id="overviewRequirements">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tasks -->
+      <div id="panel-tasks" class="tab-panel">
+        <div class="card">
+          <div class="card-title">All Tasks</div>
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Name</th><th>Description</th><th>Priority</th><th>Status</th><th>Progress</th><th>Assignee</th></tr></thead>
+            <tbody id="tasksTableBody"><tr><td colspan="7" class="empty-state">Select a project to view tasks</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Milestones -->
+      <div id="panel-milestones" class="tab-panel">
+        <div class="card">
+          <div class="card-title">Milestones</div>
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Name</th><th>Description</th><th>Status</th></tr></thead>
+            <tbody id="milestonesTableBody"><tr><td colspan="4" class="empty-state">Select a project</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Issues -->
+      <div id="panel-issues" class="tab-panel">
+        <div class="card">
+          <div class="card-title">Report New Issue</div>
+          <form id="issueForm">
+            <div class="form-row">
+              <div class="form-group"><label>Title</label><input id="issueTitle" required placeholder="e.g. Login timeout"></div>
+              <div class="form-group">
+                <label>Priority</label>
+                <select id="issuePriority"><option>low</option><option>medium</option><option>high</option><option>critical</option></select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="flex:3"><label>Description</label><textarea id="issueDesc" placeholder="Describe the issue..."></textarea></div>
+            </div>
+            <button type="submit" class="btn btn-primary">Create Issue</button>
+          </form>
+        </div>
+        <div class="card">
+          <div class="card-title">Issues</div>
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Title</th><th>Priority</th><th>Status</th><th>Assigned To</th></tr></thead>
+            <tbody id="issuesTableBody"><tr><td colspan="5" class="empty-state">Select a project</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Change Requests -->
+      <div id="panel-crs" class="tab-panel">
+        <div class="card">
+          <div class="card-title">Submit Change Request</div>
+          <form id="crForm">
+            <div class="form-row">
+              <div class="form-group"><label>Title</label><input id="crTitle" required placeholder="e.g. Add SSO authentication"></div>
+              <div class="form-group">
+                <label>Impact Scope</label>
+                <select id="crImpact"><option value="schedule">Schedule</option><option value="scope">Scope</option><option value="budget">Budget</option><option value="quality">Quality</option></select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="flex:3"><label>Justification</label><textarea id="crJustification" placeholder="Why is this change needed?"></textarea></div>
+            </div>
+            <button type="submit" class="btn btn-primary">Submit CR</button>
+          </form>
+        </div>
+        <div class="card">
+          <div class="card-title">Change Requests</div>
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Title</th><th>Justification</th><th>Status</th><th>Impact</th></tr></thead>
+            <tbody id="crsTableBody"><tr><td colspan="5" class="empty-state">Select a project</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Blockers -->
+      <div id="panel-blockers" class="tab-panel">
+        <div class="card">
+          <div class="card-title">Blocked & Overdue Tasks</div>
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Assignee</th><th>Due Date</th></tr></thead>
+            <tbody id="blockersTableBody"><tr><td colspan="5" class="empty-state">Select a project</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Daily Logs -->
+      <div id="panel-logs" class="tab-panel">
+        <div class="card">
+          <div class="card-title">Log Daily Standup</div>
+          <form id="logForm">
+            <div class="form-row">
+              <div class="form-group"><label>Task ID</label><input id="logTaskId" type="number" required></div>
+              <div class="form-group"><label>Team Member ID</label><input id="logMemberId" type="number" required></div>
+              <div class="form-group"><label>Hours Logged</label><input id="logHours" type="number" step="0.5" value="0"></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="flex:3"><label>Yesterday's Progress</label><textarea id="logYesterday" placeholder="What was completed..."></textarea></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="flex:3"><label>Today's Plan</label><textarea id="logToday" placeholder="What will be done today..."></textarea></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="flex:3"><label>Blockers</label><textarea id="logBlockers" placeholder="Any impediments?"></textarea></div>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Daily Log</button>
+          </form>
+        </div>
+        <div class="card">
+          <div class="card-title">Recent Standups</div>
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Task</th><th>Member</th><th>Yesterday</th><th>Hours</th><th>Date</th></tr></thead>
+            <tbody id="logsTableBody"><tr><td colspan="6" class="empty-state">Select a project</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Team -->
+      <div id="panel-team" class="tab-panel">
+        <div class="card">
+          <div class="card-title">Team Members</div>
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Name</th><th>Role</th></tr></thead>
+            <tbody id="teamTableBody"><tr><td colspan="3" class="empty-state">Select a project</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

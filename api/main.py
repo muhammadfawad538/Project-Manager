@@ -513,3 +513,397 @@ async def update_change_request_status(cr_id: int, request: ChangeRequestUpdateS
         cr_status = cr.status.value
 
     return {"id": cr_id, "status": cr_status, "message": f"Change Request #{cr_id} updated."}
+
+
+# ── 8. Project endpoints ────────────────────────────────────────────────────────
+
+
+@app.get("/projects")
+async def list_all_projects() -> dict:
+    """List all projects."""
+    from pmagent.db.repository import list_projects
+    from pmagent.db.models import ProjectStatus
+
+    with get_session() as s:
+        projects = list_projects(s)
+        projects_data = [
+            {
+                "id": p.id,
+                "name": p.name,
+                "project_type": p.project_type,
+                "industry": p.industry,
+                "status": p.status.value,
+                "objectives": p.objectives,
+                "requirements": p.requirements,
+                "created_at": p.created_at.isoformat(),
+            }
+            for p in projects
+        ]
+
+    return {"count": len(projects_data), "projects": projects_data}
+
+
+@app.get("/projects/{project_id}")
+async def get_project_detail(project_id: int) -> dict:
+    """Get full project details including tasks, milestones, team, blockers."""
+    from pmagent.db.repository import (
+        get_project, get_project_tasks, get_project_milestones,
+        get_team_members, find_blockers, get_project_daily_logs,
+        get_project_issues, get_project_change_requests,
+    )
+    from pmagent.db.models import TaskStatus
+
+    with get_session() as s:
+        project = get_project(s, project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
+
+        tasks = get_project_tasks(s, project_id)
+        milestones = get_project_milestones(s, project_id)
+        members = get_team_members(s, project_id)
+        blockers = find_blockers(s, project_id)
+        daily_logs = get_project_daily_logs(s, project_id)
+        issues = get_project_issues(s, project_id)
+        crs = get_project_change_requests(s, project_id)
+
+        # Calculate progress
+        total_tasks = len(tasks)
+        done_tasks = sum(1 for t in tasks if t.status == TaskStatus.done)
+        progress = round((done_tasks / total_tasks) * 100, 1) if total_tasks > 0 else 0.0
+
+        return {
+            "id": project.id,
+            "name": project.name,
+            "project_type": project.project_type,
+            "industry": project.industry,
+            "status": project.status.value,
+            "objectives": project.objectives,
+            "requirements": project.requirements,
+            "created_at": project.created_at.isoformat(),
+            "progress_pct": progress,
+            "total_tasks": total_tasks,
+            "done_tasks": done_tasks,
+            "tasks": [
+                {
+                    "id": t.id,
+                    "name": t.name,
+                    "description": t.description or "",
+                    "status": t.status.value,
+                    "priority": t.priority.value,
+                    "estimated_hours": t.estimated_hours,
+                    "actual_hours": t.actual_hours,
+                    "progress_pct": t.progress_pct,
+                    "due_date": t.due_date.strftime("%Y-%m-%d") if t.due_date else None,
+                    "assigned_to": t.assigned_to.name if t.assigned_to else None,
+                    "dependencies": t.dependencies or "",
+                }
+                for t in tasks
+            ],
+            "milestones": [
+                {
+                    "id": m.id,
+                    "name": m.name,
+                    "description": m.description or "",
+                    "status": m.status.value,
+                    "due_date": m.due_date.strftime("%Y-%m-%d") if m.due_date else None,
+                }
+                for m in milestones
+            ],
+            "team": [
+                {
+                    "id": tm.id,
+                    "name": tm.name,
+                    "role": tm.role,
+                    "availability_hours_per_week": tm.availability_hours_per_week,
+                }
+                for tm in members
+            ],
+            "blockers": blockers,
+            "daily_logs": [
+                {
+                    "id": dl.id,
+                    "task_id": dl.task_id,
+                    "team_member": dl.team_member.name if dl.team_member else None,
+                    "yesterday_progress": dl.yesterday_progress,
+                    "today_plan": dl.today_plan,
+                    "blockers": dl.blockers,
+                    "hours_logged": dl.hours_logged,
+                    "log_date": dl.log_date.isoformat(),
+                }
+                for dl in daily_logs
+            ],
+            "issues": [
+                {
+                    "id": i.id,
+                    "title": i.title,
+                    "description": i.description or "",
+                    "priority": i.priority.value,
+                    "status": i.status.value,
+                    "assigned_to": i.assigned_to.name if i.assigned_to else None,
+                    "resolution_notes": i.resolution_notes or "",
+                    "created_at": i.created_at.isoformat(),
+                }
+                for i in issues
+            ],
+            "change_requests": [
+                {
+                    "id": cr.id,
+                    "title": cr.title,
+                    "justification": cr.justification,
+                    "impact_scope": cr.impact_scope,
+                    "status": cr.status.value,
+                    "created_at": cr.created_at.isoformat(),
+                }
+                for cr in crs
+            ],
+        }
+
+
+# ── 9. Task endpoints ───────────────────────────────────────────────────────────
+
+
+class TaskStatusUpdate(BaseModel):
+    status: str = Field(..., description="todo/in_progress/in_review/done/blocked/cancelled")
+
+
+class TaskProgressUpdate(BaseModel):
+    progress_pct: float = Field(..., ge=0, le=100, description="Progress percentage 0-100")
+
+
+class TaskCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    estimated_hours: float = 0.0
+    priority: str = "medium"
+    due_date: Optional[str] = None
+    assigned_to_id: Optional[int] = None
+    dependencies: str = ""
+
+
+@app.post("/projects/{project_id}/tasks")
+async def create_task_endpoint(project_id: int, request: TaskCreateRequest) -> dict:
+    """Create a new task."""
+    from pmagent.db.repository import create_task
+    from pmagent.db.models import TaskStatus, Priority
+    from datetime import datetime
+
+    due = None
+    if request.due_date:
+        try:
+            due = datetime.strptime(request.due_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid due_date format. Use YYYY-MM-DD")
+
+    with get_session() as s:
+        t = create_task(
+            s,
+            project_id=project_id,
+            name=request.name,
+            description=request.description,
+            estimated_hours=request.estimated_hours,
+            priority=request.priority,
+            due_date=due,
+            assigned_to_id=request.assigned_to_id,
+            dependencies=request.dependencies,
+        )
+        tid = t.id
+
+    return {
+        "id": tid,
+        "project_id": project_id,
+        "name": request.name,
+        "status": TaskStatus.todo.value,
+        "message": f"Task '{request.name}' created.",
+    }
+
+
+@app.put("/tasks/{task_id}/status")
+async def update_task_status_endpoint(task_id: int, request: TaskStatusUpdate) -> dict:
+    """Update a task's status."""
+    from pmagent.db.repository import update_task_status
+    from pmagent.db.models import TaskStatus
+
+    try:
+        st = TaskStatus(request.status.lower())
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status '{request.status}'. Use: todo, in_progress, in_review, done, blocked, cancelled",
+        )
+
+    with get_session() as s:
+        task = update_task_status(s, task_id, st)
+        if not task:
+            raise HTTPException(status_code=404, detail=f"Task #{task_id} not found")
+
+    return {"id": task_id, "status": st.value, "message": f"Task #{task_id} marked as '{st.value}'."}
+
+
+@app.put("/tasks/{task_id}/progress")
+async def update_task_progress_endpoint(task_id: int, request: TaskProgressUpdate) -> dict:
+    """Update a task's progress percentage."""
+    from pmagent.db.repository import update_task_progress
+
+    with get_session() as s:
+        task = update_task_progress(s, task_id, request.progress_pct)
+        if not task:
+            raise HTTPException(status_code=404, detail=f"Task #{task_id} not found")
+        pct = task.progress_pct
+
+    return {"id": task_id, "progress_pct": pct, "message": f"Task #{task_id} progress updated to {pct}%."}
+
+
+# ── 10. Milestone endpoints ─────────────────────────────────────────────────────
+
+
+class MilestoneCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    due_date: Optional[str] = None
+
+
+class MilestoneStatusUpdate(BaseModel):
+    status: str = Field(..., description="pending/on_track/at_risk/missed/achieved")
+
+
+@app.post("/projects/{project_id}/milestones")
+async def create_milestone_endpoint(project_id: int, request: MilestoneCreateRequest) -> dict:
+    """Create a new milestone."""
+    from pmagent.db.repository import create_milestone
+    from pmagent.db.models import MilestoneStatus
+    from datetime import datetime
+
+    due = None
+    if request.due_date:
+        try:
+            due = datetime.strptime(request.due_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid due_date format. Use YYYY-MM-DD")
+
+    with get_session() as s:
+        m = create_milestone(
+            s,
+            project_id=project_id,
+            name=request.name,
+            description=request.description,
+            due_date=due,
+        )
+        mid = m.id
+
+    return {
+        "id": mid,
+        "project_id": project_id,
+        "name": request.name,
+        "status": MilestoneStatus.pending.value,
+        "message": f"Milestone '{request.name}' created.",
+    }
+
+
+@app.put("/milestones/{milestone_id}/status")
+async def update_milestone_status_endpoint(milestone_id: int, request: MilestoneStatusUpdate) -> dict:
+    """Update a milestone's status."""
+    from pmagent.db.repository import update_milestone_status
+    from pmagent.db.models import MilestoneStatus
+
+    try:
+        st = MilestoneStatus(request.status.lower())
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status '{request.status}'. Use: pending, on_track, at_risk, missed, achieved",
+        )
+
+    with get_session() as s:
+        milestone = update_milestone_status(s, milestone_id, st)
+        if not milestone:
+            raise HTTPException(status_code=404, detail=f"Milestone #{milestone_id} not found")
+
+    return {"id": milestone_id, "status": st.value, "message": f"Milestone #{milestone_id} updated to '{st.value}'."}
+
+
+# ── 11. Daily Log endpoints ─────────────────────────────────────────────────────
+
+
+class DailyLogCreateRequest(BaseModel):
+    task_id: int
+    team_member_id: int
+    yesterday_progress: str = ""
+    today_plan: str = ""
+    blockers: str = ""
+    hours_logged: float = 0.0
+
+
+@app.post("/projects/{project_id}/daily-logs")
+async def create_daily_log_endpoint(project_id: int, request: DailyLogCreateRequest) -> dict:
+    """Create a daily standup log."""
+    from pmagent.db.repository import create_daily_log
+
+    with get_session() as s:
+        log = create_daily_log(
+            s,
+            task_id=request.task_id,
+            team_member_id=request.team_member_id,
+            project_id=project_id,
+            yesterday_progress=request.yesterday_progress,
+            today_plan=request.today_plan,
+            blockers=request.blockers,
+            hours_logged=request.hours_logged,
+        )
+        lid = log.id
+
+    return {"id": lid, "project_id": project_id, "message": f"Daily log #{lid} created."}
+
+
+@app.get("/projects/{project_id}/daily-logs")
+async def get_daily_logs(project_id: int) -> dict:
+    """Get all daily logs for a project."""
+    from pmagent.db.repository import get_project_daily_logs
+
+    with get_session() as s:
+        logs = get_project_daily_logs(s, project_id)
+        logs_data = [
+            {
+                "id": dl.id,
+                "task_id": dl.task_id,
+                "team_member": dl.team_member.name if dl.team_member else None,
+                "yesterday_progress": dl.yesterday_progress,
+                "today_plan": dl.today_plan,
+                "blockers": dl.blockers,
+                "hours_logged": dl.hours_logged,
+                "log_date": dl.log_date.isoformat(),
+            }
+            for dl in logs
+        ]
+
+    return {"project_id": project_id, "count": len(logs_data), "daily_logs": logs_data}
+
+
+# ── 12. Blocker endpoint ───────────────────────────────────────────────────────
+
+
+@app.get("/projects/{project_id}/blockers")
+async def get_project_blockers(project_id: int) -> dict:
+    """Get all blocked or overdue tasks for a project."""
+    from pmagent.db.repository import find_blockers
+
+    with get_session() as s:
+        blockers = find_blockers(s, project_id)
+
+    return {"project_id": project_id, "blockers": blockers, "count": len(blockers)}
+
+
+# ── 13. Dashboard ──────────────────────────────────────────────────────────────
+
+
+from fastapi.responses import FileResponse, HTMLResponse
+from pathlib import Path
+
+_DASHBOARD_PATH = Path(__file__).resolve().parent.parent / "static" / "index.html"
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard() -> HTMLResponse:
+    """Serve the project management dashboard."""
+    if not _DASHBOARD_PATH.exists():
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+    return FileResponse(_DASHBOARD_PATH)
