@@ -34,6 +34,8 @@ load_dotenv(_ENV_PATH)
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
@@ -94,6 +96,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Serve static files (CSS, JS, dashboard HTML)
+_STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+if _STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
 
 # ── 2. Request / Response models ──────────────────────────────────────────────
 
@@ -137,7 +144,105 @@ def _get_crew():
     return _crew
 
 
-# ── 4. Routes ─────────────────────────────────────────────────────────────────
+# ── 4. Plan persistence ───────────────────────────────────────────────────────
+
+
+def _save_plan_to_db(request, result: dict) -> None:
+    """Save the generated plan (tasks, milestones, team) to the database."""
+    from pmagent.db.session import get_session
+    from pmagent.db.models import ProjectStatus, TaskStatus, Priority
+    from pmagent.db.repository import (
+        create_project, add_team_member, create_task,
+        create_milestone, get_project,
+    )
+    from datetime import datetime, date
+    import json
+
+    wbs = result.get("wbs", {})
+    resources = result.get("resources", {})
+
+    with get_session() as s:
+        # Create project
+        project = create_project(
+            s,
+            name=request.project_type,
+            project_type=request.project_type,
+            industry=request.industry or "Technology",
+            objectives=request.project_objectives,
+            requirements=request.project_requirements,
+            l1_inputs=json.dumps({
+                "country": request.country,
+                "currency": request.currency,
+                "deadline": request.deadline,
+                "output_language": request.output_language,
+                "team_members_raw": request.team_members,
+            }),
+        )
+
+        # Create team members from request
+        for line in request.team_members.strip().split("\n"):
+            line = line.strip().lstrip("-").strip()
+            if not line:
+                continue
+            if "(" in line and ")" in line:
+                name = line[:line.index("(")].strip()
+                role = line[line.index("(") + 1:line.index(")")].strip()
+            else:
+                name = line
+                role = "Team Member"
+            add_team_member(s, project_id=project.id, name=name, role=role)
+
+        # Create tasks from WBS
+        _priority_map = {"must": "high", "should": "medium", "nice-to-have": "low", "critical": "critical", "high": "high", "medium": "medium", "low": "low"}
+        for task_data in wbs.get("tasks", []):
+            raw_priority = str(task_data.get("priority", "medium")).lower()
+            priority = _priority_map.get(raw_priority, "medium")
+
+            # Convert due_date string to date object
+            due = None
+            due_str = task_data.get("due_date", "")
+            if due_str:
+                try:
+                    if isinstance(due_str, str):
+                        due = datetime.strptime(due_str, "%Y-%m-%d").date()
+                    else:
+                        due = due_str
+                except (ValueError, TypeError):
+                    pass
+
+            create_task(
+                s,
+                project_id=project.id,
+                name=task_data.get("name", "Unnamed Task"),
+                description=task_data.get("description", ""),
+                estimated_hours=task_data.get("estimated_hours", 0),
+                priority=priority,
+                due_date=due,
+                dependencies=",".join(task_data.get("dependencies", []) or []),
+            )
+
+        # Create milestones from WBS
+        for ms_data in wbs.get("milestones", []):
+            due = None
+            due_str = ms_data.get("due_date", "")
+            if due_str:
+                try:
+                    if isinstance(due_str, str):
+                        due = datetime.strptime(due_str, "%Y-%m-%d").date()
+                    else:
+                        due = due_str
+                except (ValueError, TypeError):
+                    pass
+            create_milestone(
+                s,
+                project_id=project.id,
+                name=ms_data.get("name", "Unnamed Milestone"),
+                description=ms_data.get("deliverable", ""),
+                due_date=due,
+            )
+
+
+# ── 5. Routes ─────────────────────────────────────────────────────────────────
 
 
 @app.get("/health")
@@ -192,6 +297,10 @@ async def generate_plan(request: ProjectRequest) -> dict:
         import asyncio
 
         result = await asyncio.to_thread(kickoff, inputs=inputs)
+
+        # Save the generated plan to the database
+        _save_plan_to_db(request, result)
+
         return result
 
     except Exception as exc:
@@ -604,6 +713,84 @@ async def get_project_detail(project_id: int) -> dict:
         done_tasks = sum(1 for t in tasks if t.status == TaskStatus.done)
         progress = round((done_tasks / total_tasks) * 100, 1) if total_tasks > 0 else 0.0
 
+        # Extract all relationship-dependent values inside the session
+        tasks_data = [
+            {
+                "id": t.id,
+                "name": t.name,
+                "description": t.description or "",
+                "status": t.status.value,
+                "priority": t.priority.value,
+                "estimated_hours": t.estimated_hours,
+                "actual_hours": t.actual_hours,
+                "progress_pct": t.progress_pct,
+                "due_date": t.due_date.strftime("%Y-%m-%d") if t.due_date else None,
+                "assigned_to": t.assigned_to.name if t.assigned_to else None,
+                "dependencies": t.dependencies or "",
+            }
+            for t in tasks
+        ]
+        milestones_data = [
+            {
+                "id": m.id,
+                "name": m.name,
+                "description": m.description or "",
+                "status": m.status.value,
+                "due_date": m.due_date.strftime("%Y-%m-%d") if m.due_date else None,
+            }
+            for m in milestones
+        ]
+        team_data = [
+            {
+                "id": tm.id,
+                "name": tm.name,
+                "role": tm.role,
+                "availability_hours_per_week": tm.availability_hours_per_week,
+            }
+            for tm in members
+        ]
+        logs_data = [
+            {
+                "id": dl.id,
+                "task_id": dl.task_id,
+                "team_member": dl.team_member.name if dl.team_member else None,
+                "yesterday_progress": dl.yesterday_progress,
+                "today_plan": dl.today_plan,
+                "blockers": dl.blockers,
+                "hours_logged": dl.hours_logged,
+                "log_date": dl.log_date.isoformat(),
+            }
+            for dl in daily_logs
+        ]
+        issues_data = [
+            {
+                "id": i.id,
+                "title": i.title,
+                "description": i.description or "",
+                "priority": i.priority.value,
+                "status": i.status.value,
+                "assigned_to": i.assigned_to.name if i.assigned_to else None,
+                "resolution_notes": i.resolution_notes or "",
+                "created_at": i.created_at.isoformat(),
+            }
+            for i in issues
+        ]
+        crs_data = [
+            {
+                "id": cr.id,
+                "title": cr.title,
+                "justification": cr.justification,
+                "impact_scope": cr.impact_scope,
+                "status": cr.status.value,
+                "submitted_by": cr.submitted_by.name if cr.submitted_by else None,
+                "approved_by": cr.approved_by.name if cr.approved_by else None,
+                "created_at": cr.created_at.isoformat(),
+                "decision_date": cr.decision_date.isoformat() if cr.decision_date else None,
+                "implemented_at": cr.implemented_at.isoformat() if cr.implemented_at else None,
+            }
+            for cr in crs
+        ]
+
         return {
             "id": project.id,
             "name": project.name,
@@ -616,79 +803,13 @@ async def get_project_detail(project_id: int) -> dict:
             "progress_pct": progress,
             "total_tasks": total_tasks,
             "done_tasks": done_tasks,
-            "tasks": [
-                {
-                    "id": t.id,
-                    "name": t.name,
-                    "description": t.description or "",
-                    "status": t.status.value,
-                    "priority": t.priority.value,
-                    "estimated_hours": t.estimated_hours,
-                    "actual_hours": t.actual_hours,
-                    "progress_pct": t.progress_pct,
-                    "due_date": t.due_date.strftime("%Y-%m-%d") if t.due_date else None,
-                    "assigned_to": t.assigned_to.name if t.assigned_to else None,
-                    "dependencies": t.dependencies or "",
-                }
-                for t in tasks
-            ],
-            "milestones": [
-                {
-                    "id": m.id,
-                    "name": m.name,
-                    "description": m.description or "",
-                    "status": m.status.value,
-                    "due_date": m.due_date.strftime("%Y-%m-%d") if m.due_date else None,
-                }
-                for m in milestones
-            ],
-            "team": [
-                {
-                    "id": tm.id,
-                    "name": tm.name,
-                    "role": tm.role,
-                    "availability_hours_per_week": tm.availability_hours_per_week,
-                }
-                for tm in members
-            ],
+            "tasks": tasks_data,
+            "milestones": milestones_data,
+            "team": team_data,
             "blockers": blockers,
-            "daily_logs": [
-                {
-                    "id": dl.id,
-                    "task_id": dl.task_id,
-                    "team_member": dl.team_member.name if dl.team_member else None,
-                    "yesterday_progress": dl.yesterday_progress,
-                    "today_plan": dl.today_plan,
-                    "blockers": dl.blockers,
-                    "hours_logged": dl.hours_logged,
-                    "log_date": dl.log_date.isoformat(),
-                }
-                for dl in daily_logs
-            ],
-            "issues": [
-                {
-                    "id": i.id,
-                    "title": i.title,
-                    "description": i.description or "",
-                    "priority": i.priority.value,
-                    "status": i.status.value,
-                    "assigned_to": i.assigned_to.name if i.assigned_to else None,
-                    "resolution_notes": i.resolution_notes or "",
-                    "created_at": i.created_at.isoformat(),
-                }
-                for i in issues
-            ],
-            "change_requests": [
-                {
-                    "id": cr.id,
-                    "title": cr.title,
-                    "justification": cr.justification,
-                    "impact_scope": cr.impact_scope,
-                    "status": cr.status.value,
-                    "created_at": cr.created_at.isoformat(),
-                }
-                for cr in crs
-            ],
+            "daily_logs": logs_data,
+            "issues": issues_data,
+            "change_requests": crs_data,
         }
 
 

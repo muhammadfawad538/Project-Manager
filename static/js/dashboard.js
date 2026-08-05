@@ -304,10 +304,265 @@ function switchTab(tabName) {
 
 // ── Language toggle ──────────────────────────────────────────────────────────
 
+const I18N = {
+  en: {
+    langBtn: 'عربي',
+    projectDetails: 'Project Details',
+    projectListHeader: 'Projects',
+    sidebarFooter: 'pmagent v0.1 · GCC Markets',
+    selectProject: 'Select a project',
+    overview: 'Overview',
+    tasks: 'Tasks',
+    milestones: 'Milestones',
+    issues: 'Issues',
+    crs: 'Change Requests',
+    blockers: 'Blockers',
+    logs: 'Daily Logs',
+    team: 'Team',
+    progress: 'Progress',
+    openIssues: 'Open Issues',
+    blockersStat: 'Blockers',
+    changeRequests: 'Change Requests',
+    status: 'Status',
+    created: 'Created',
+    objectives: 'Objectives',
+    requirements: 'Requirements',
+    allTasks: 'All Tasks',
+    name: 'Name',
+    description: 'Description',
+    priority: 'Priority',
+    status_: 'Status',
+    progress_: 'Progress',
+    assignee: 'Assignee',
+    noProjects: 'No projects yet',
+    noTasks: 'No tasks',
+    noMilestones: 'No milestones',
+    reportIssue: 'Report New Issue',
+    title_: 'Title',
+    priority_: 'Priority',
+    description_: 'Description',
+    createIssue: 'Create Issue',
+    submitCR: 'Submit Change Request',
+    impactScope: 'Impact Scope',
+    justification: 'Justification',
+    submitCRBtn: 'Submit CR',
+    blockedOverdue: 'Blocked & Overdue Tasks',
+    dueDate: 'Due Date',
+    logStandup: 'Log Daily Standup',
+    taskId: 'Task ID',
+    memberId: 'Team Member ID',
+    hoursLogged: 'Hours Logged',
+    yesterday: "Yesterday's Progress",
+    todayPlan: "Today's Plan",
+    blockers_: 'Blockers',
+    saveLog: 'Save Daily Log',
+    recentStandups: 'Recent Standups',
+    member: 'Member',
+    date: 'Date',
+    teamMembers: 'Team Members',
+    role: 'Role',
+    selectProjectView: 'Select a project to view tasks',
+    selectProject_: 'Select a project',
+    noBlockers: 'No blockers — all clear!',
+    noLogs: 'No daily logs yet',
+    noIssues: 'No issues',
+    noCRs: 'No change requests',
+    noTeam: 'No team members',
+    eG: 'e.g.',
+    loginTimeout: 'e.g. Login timeout',
+    ssoAuth: 'e.g. Add SSO authentication',
+    whyChange: 'Why is this change needed?',
+    whatCompleted: 'What was completed...',
+    whatToday: 'What will be done today...',
+    anyImpediments: 'Any impediments?',
+    schedule: 'Schedule',
+    scope: 'Scope',
+    budget: 'Budget',
+    quality: 'Quality',
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+    critical: 'Critical',
+  },
+  ar: {
+    langBtn: 'English',
+    projectDetails: 'تفاصيل المشروع',
+    projectListHeader: 'المشاريع',
+    sidebarFooter: 'pmagent v0.1 · أسواق الخليج',
+    selectProject: 'اختر مشروعاً',
+    overview: 'نظرة عامة',
+    tasks: 'المهام',
+    milestones: 'المراحل',
+    issues: 'المشاكل',
+    crs: 'طلبات التغيير',
+    blockers: 'العوائق',
+    logs: 'السجلات اليومية',
+    team: 'الفريق',
+    progress: 'التقدم',
+    openIssues: 'المشاكل المفتوحة',
+    blockersStat: 'العوائق',
+    changeRequests: 'طلبات التغيير',
+    status: 'الحالة',
+    created: 'تاريخ الإنشاء',
+    objectives: 'الأهداف',
+    requirements: 'المتطلبات',
+    allTasks: 'جميع المهام',
+    name: 'الاسم',
+    description: 'الوصف',
+    priority: 'الأولوية',
+    status_: 'الحالة',
+    progress_: 'التقدم',
+    assignee: 'المسند',
+    noProjects: 'لا توجد مشاريع',
+    noTasks: 'لا توجد مهام',
+    noMilestones: 'لا توجد مراحل',
+    reportIssue: 'الإبلاغ عن مشكلة',
+    title_: 'العنوان',
+    priority_: 'الأولوية',
+    description_: 'الوصف',
+    createIssue: 'إنشاء مشكلة',
+    submitCR: 'طلب تغيير',
+    impactScope: 'نطاق التأثير',
+    justification: 'التبرير',
+    submitCRBtn: 'إرسال',
+    blockedOverdue: 'المهام المتوقفة والمتأخرة',
+    dueDate: 'تاريخ الاستحقاق',
+    logStandup: 'تسجيل اجتماع يومي',
+    taskId: 'رقم المهمة',
+    memberId: 'رقم عضو الفريق',
+    hoursLogged: 'ساعات مسجلة',
+    yesterday: 'تقدم الأمس',
+    todayPlan: 'خطة اليوم',
+    blockers_: 'العوائق',
+    saveLog: 'حفظ السجل',
+    recentStandups: 'الاجتماعات الأخيرة',
+    member: 'العضو',
+    date: 'التاريخ',
+    teamMembers: 'أعضاء الفريق',
+    role: 'الدور',
+    selectProjectView: 'اختر مشروعاً لعرض المهام',
+    selectProject_: 'اختر مشروعاً',
+    noBlockers: 'لا توجد عوائق — كل شيء سليم!',
+    noLogs: 'لا توجد سجلات يومية',
+    noIssues: 'لا توجد مشاكل',
+    noCRs: 'لا توجد طلبات تغيير',
+    noTeam: 'لا يوجد أعضاء فريق',
+    eG: 'مثال:',
+    loginTimeout: 'مثال: انتهاء مهلة تسجيل الدخول',
+    ssoAuth: 'مثال: إضافة مصادقة SSO',
+    whyChange: 'لماذا هذا التغيير مطلوب؟',
+    whatCompleted: 'ما الذي تم إنجازه...',
+    whatToday: 'ما الذي سيتم إنجازه اليوم...',
+    anyImpediments: 'هل هناك عوائق؟',
+    schedule: 'الجدول الزمني',
+    scope: 'النطاق',
+    budget: 'الميزانية',
+    quality: 'الجودة',
+    low: 'منخفض',
+    medium: 'متوسط',
+    high: 'مرتفع',
+    critical: 'حرج',
+  },
+};
+
+function t(key) {
+  const dict = I18N[currentLang] || I18N.en;
+  return dict[key] || key;
+}
+
 function toggleLang() {
   currentLang = currentLang === 'en' ? 'ar' : 'en';
   document.body.classList.toggle('rtl', currentLang === 'ar');
-  $('#langBtn').textContent = currentLang === 'en' ? 'عربي' : 'English';
+  document.documentElement.lang = currentLang;
+  $('#langBtn').textContent = t('langBtn');
+
+  // Tab labels
+  const tabs = ['overview', 'tasks', 'milestones', 'issues', 'crs', 'blockers', 'logs', 'team'];
+  tabs.forEach(name => {
+    const tab = document.querySelector(`.tab[data-tab="${name}"]`);
+    if (tab) tab.textContent = t(name);
+  });
+
+  // Stat labels
+  $('#statTasks').previousElementSibling.textContent = t('progress');
+  $('#statIssues').previousElementSibling.textContent = t('openIssues');
+  $('#statBlockers').previousElementSibling.textContent = t('blockersStat');
+  $('#statCRs').previousElementSibling.textContent = t('changeRequests');
+
+  // Overview card
+  const cardTitles = document.querySelectorAll('.card-title');
+  cardTitles.forEach(el => {
+    const text = el.textContent.trim().toLowerCase();
+    if (text.includes('project details')) el.textContent = t('projectDetails') || 'Project Details';
+    if (text.includes('all tasks')) el.textContent = t('allTasks');
+    if (text.includes('milestones')) el.textContent = t('milestones');
+    if (text.includes('report new issue')) el.textContent = t('reportIssue');
+    if (text.includes('issues') && !text.includes('report')) el.textContent = t('issues');
+    if (text.includes('submit change request')) el.textContent = t('submitCR');
+    if (text.includes('change requests') && !text.includes('submit')) el.textContent = t('crs');
+    if (text.includes('blocked')) el.textContent = t('blockedOverdue');
+    if (text.includes('log daily')) el.textContent = t('logStandup');
+    if (text.includes('recent')) el.textContent = t('recentStandups');
+    if (text.includes('team members')) el.textContent = t('teamMembers');
+  });
+
+  // Form labels and placeholders
+  const labels = document.querySelectorAll('label');
+  labels.forEach(el => {
+    const text = el.textContent.trim().toLowerCase();
+    if (text.includes('task id')) el.textContent = t('taskId');
+    else if (text.includes('team member')) el.textContent = t('memberId');
+    else if (text.includes('hours logged')) el.textContent = t('hoursLogged');
+    else if (text.includes('yesterday')) el.textContent = t('yesterday');
+    else if (text.includes('today')) el.textContent = t('todayPlan');
+    else if (text.includes('blockers') && !text.includes('any')) el.textContent = t('blockers_');
+    else if (text.includes('title') && !text.includes('impact')) el.textContent = t('title_');
+    else if (text.includes('priority')) el.textContent = t('priority_');
+    else if (text.includes('description') && !text.includes('impact')) el.textContent = t('description_');
+    else if (text.includes('impact scope')) el.textContent = t('impactScope');
+    else if (text.includes('justification')) el.textContent = t('justification');
+  });
+
+  const placeholders = document.querySelectorAll('textarea, input[placeholder]');
+  placeholders.forEach(el => {
+    const ph = el.placeholder.toLowerCase();
+    if (ph.includes('login')) el.placeholder = t('loginTimeout');
+    else if (ph.includes('sso') || ph.includes('add')) el.placeholder = t('ssoAuth');
+    else if (ph.includes('why')) el.placeholder = t('whyChange');
+    else if (ph.includes('what was completed') || ph.includes('completed')) el.placeholder = t('whatCompleted');
+    else if (ph.includes('what will be done') || ph.includes('today')) el.placeholder = t('whatToday');
+    else if (ph.includes('impediments') || ph.includes('any blockers')) el.placeholder = t('anyImpediments');
+  });
+
+  // Form buttons
+  const buttons = document.querySelectorAll('button[type="submit"]');
+  buttons.forEach(btn => {
+    const text = btn.textContent.trim().toLowerCase();
+    if (text.includes('create issue')) btn.textContent = t('createIssue');
+    else if (text.includes('submit cr')) btn.textContent = t('submitCRBtn');
+    else if (text.includes('save daily')) btn.textContent = t('saveLog');
+  });
+
+  // Select options
+  const selects = document.querySelectorAll('select');
+  selects.forEach(sel => {
+    Array.from(sel.options).forEach(opt => {
+      const val = opt.value.toLowerCase();
+      const text = opt.textContent.trim().toLowerCase();
+      if (text === 'low' || val === 'low') opt.textContent = t('low');
+      else if (text === 'medium' || val === 'medium') opt.textContent = t('medium');
+      else if (text === 'high' || val === 'high') opt.textContent = t('high');
+      else if (text === 'critical' || val === 'critical') opt.textContent = t('critical');
+      else if (text === 'schedule' || val === 'schedule') opt.textContent = t('schedule');
+      else if (text === 'scope' || val === 'scope') opt.textContent = t('scope');
+      else if (text === 'budget' || val === 'budget') opt.textContent = t('budget');
+      else if (text === 'quality' || val === 'quality') opt.textContent = t('quality');
+    });
+  });
+
+  // Re-render dynamic content
+  if (currentProjectId) selectProject(currentProjectId);
+  else renderProjectList();
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────

@@ -184,7 +184,7 @@ def find_blockers(session, project_id: int) -> list[dict]:
                 "assigned_to_id": t.assigned_to_id,
                 "due_date": t.due_date,
             })
-        elif t.due_date and t.due_date.date() < today and t.status not in (
+        elif t.due_date and t.due_date < today and t.status not in (
             TaskStatus.done,
             TaskStatus.cancelled,
         ):
